@@ -2,7 +2,7 @@ import torch
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import TQDMProgressBar
 
-from model import CustomConvNeXtTiny
+from model import CustomConvNeXtTiny, CustomConvNeXtLarge
 from dataset import CustomImageModule
 import config
 
