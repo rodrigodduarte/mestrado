@@ -1,3 +1,5 @@
 imagens/
 wandb/
 models/
+lightning_logs/
+__pycache__/
