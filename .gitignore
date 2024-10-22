@@ -3,6 +3,5 @@ wandb/
 models/
 lightning_logs/
 __pycache__/
-compact_transform/
 CCT_14_7x2_224/
 swedish calssification with lightning/
