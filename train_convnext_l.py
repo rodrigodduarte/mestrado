@@ -1,24 +1,70 @@
 import torch
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import TQDMProgressBar
+import numpy as np
 
-from model import CustomConvNeXtLarge
+from pytorch_lightning.callbacks import TQDMProgressBar, EarlyStopping
+from pytorch_lightning.profilers import PyTorchProfiler
+
+from model import CustomConvNeXtTiny, CustomConvNeXtLarge
 from dataset import CustomImageModule
-import config_384_a
+import config as config
+
+import wandb
+from pytorch_lightning.loggers import WandbLogger
+
+import random
+
 
 if __name__== "__main__":
+    wandb.login()
 
-    data_module = CustomImageModule(config_384_a.TRAIN_DIR, config_384_a.TEST_DIR, config_384_a.SHAPE,
-                                    config_384_a.BATCH_SIZE, config_384_a.NUM_WORKERS)
+    hyperparameters = dict(
+    shape = config.SHAPE,
+    epochs = config.MAX_EPOCHS,
+    classes = config.NUM_CLASSES,
+    batch_size = config.BATCH_SIZE,
+    learning_rate = config.LEARNING_RATE,
+    weight_decay = config.WEIGHT_DECAY,
+    optimizer_momentum = config.OPTIMIZER_MOMENTUM,
+    scale_factor = config.SCALE_FACTOR,
+    drop_path_rate = config.DROP_PATH_RATE,
+    label_smoothing = config.LABEL_SMOOTHING,
+    num_workers = config.NUM_WORKERS,
+    precision = config.PRECISION
+)
 
-    model = CustomConvNeXtLarge(epochs=config_384_a.MAX_EPOCHS, learning_rate=config_384_a.LEARNING_RATE,
-                               scale_factor=config_384_a.SCALE_FACTOR,drop_path_rate=config_384_a.DROP_PATH_RATE,
-                               num_classes=config_384_a.NUM_CLASSES, label_smoothing=config_384_a.LABEL_SMOOTHING)
-    
-    trainer = pl.Trainer(accelerator=config_384_a.ACCELERATOR, devices=config_384_a.DEVICES,
-                         precision=config_384_a.PRECISION, max_epochs=config_384_a.MAX_EPOCHS,
-                         callbacks=[TQDMProgressBar(leave=True)])
+    # Ensure deterministic behavior
+    torch.backends.cudnn.deterministic = True
+    random.seed(hash("setting random seeds") % 2**32 - 1)
+    np.random.seed(hash("improves reproducibility") % 2**32 - 1)
+    torch.manual_seed(hash("by removing stochasticity") % 2**32 - 1)
+    torch.cuda.manual_seed_all(hash("so runs are repeatable") % 2**32 - 1)
+    data_module = CustomImageModule(config.TRAIN_DIR, config.TEST_DIR, config.SHAPE,
+                                    config.BATCH_SIZE, config.NUM_WORKERS)
 
-    trainer.fit(model, data_module)
+    with wandb.init(project="swedish calssification with lightning", config=hyperparameters):
+        wandb_logger = WandbLogger(project="swedish calssification with lightning")
 
-    trainer.test(model, data_module)
+        model = CustomConvNeXtLarge(
+            epochs=config.MAX_EPOCHS,
+            learning_rate=config.LEARNING_RATE,
+            scale_factor=config.SCALE_FACTOR,
+            drop_path_rate=config.DROP_PATH_RATE,
+            num_classes=config.NUM_CLASSES,
+            label_smoothing=config.LABEL_SMOOTHING)
+        
+        trainer = pl.Trainer(
+            logger=wandb_logger,    # W&B integration
+            log_every_n_steps=50,   # set the logging frequency
+            profiler="simple",
+            accelerator=config.ACCELERATOR,
+            devices=config.DEVICES,
+            precision=config.PRECISION,
+            max_epochs=config.MAX_EPOCHS,
+            callbacks=[TQDMProgressBar(leave=True)])
+
+        trainer.fit(model, data_module)
+
+        trainer.test(model, data_module)
+
+        wandb.finish()
