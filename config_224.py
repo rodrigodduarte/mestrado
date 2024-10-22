@@ -6,10 +6,10 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Train Hyperparameters
 TRAIN_DIR = "/home/rodrigo/Documentos/mestrado/GitHub/imagens/swedish/train"
 TEST_DIR = "/home/rodrigo/Documentos/mestrado/GitHub/imagens/swedish/test"
-SHAPE = (384, 384)
-MAX_EPOCHS = 30
+SHAPE = (224, 224)
+MAX_EPOCHS = 10
 NUM_CLASSES = 15
-BATCH_SIZE = 64
+BATCH_SIZE = 8
 LEARNING_RATE = 5e-5
 WEIGHT_DECAY = 1e-8
 OPTIMIZER_MOMENTUM = (0.9, 0.999)
