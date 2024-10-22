@@ -5,7 +5,7 @@ import numpy as np
 from pytorch_lightning.callbacks import TQDMProgressBar, EarlyStopping
 from pytorch_lightning.profilers import PyTorchProfiler
 
-from model import CustomConvNeXtTiny, CustomConvNeXtLarge
+from model import CustomConvNeXtTiny, CustomConvNeXtSmall, CustomConvNeXtBase, CustomConvNeXtLarge
 from dataset import CustomImageModule
 import config
 
@@ -45,7 +45,7 @@ if __name__== "__main__":
     with wandb.init(project="swedish calssification with lightning", config=hyperparameters):
         wandb_logger = WandbLogger(project="swedish calssification with lightning")
 
-        model = CustomConvNeXtTiny(
+        model = CustomConvNeXtSmall(
             epochs=config.MAX_EPOCHS,
             learning_rate=config.LEARNING_RATE,
             scale_factor=config.SCALE_FACTOR,
