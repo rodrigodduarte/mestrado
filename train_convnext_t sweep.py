@@ -66,11 +66,14 @@ def train_model(config=None):
         # Configurar o Trainer do PyTorch Lightning
         trainer = pl.Trainer(
             logger=wandb_logger,    # W&B integration
+            log_every_n_steps=10,
             accelerator=hyperparams['ACCELERATOR'],  # Fixo
             devices=hyperparams['DEVICES'],          # Fixo
             precision=hyperparams['PRECISION'],      # Fixo
             max_epochs=hyperparams['MAX_EPOCHS'],    # Fixo
-            callbacks=[TQDMProgressBar(leave=True)]
+            callbacks=[TQDMProgressBar(leave=True)],
+            num_nodes=1,
+            strategy=pl.strategies.DDPStrategy(find_unused_parameters=False, gradient_as_bucket_view=True),
         )
 
         # Treinando o modelo
@@ -79,8 +82,7 @@ def train_model(config=None):
         # Testando o modelo
         trainer.test(model, data_module)
 
-        # Finalizando o WandB
-        wandb.finish()      
+        wandb.finish()
 
 if __name__ == "__main__":
     # Login no W&B
@@ -98,11 +100,11 @@ if __name__ == "__main__":
         },
         'parameters': {
             'batch_size': {
-                'values': [8]  # valores de batch size a serem testados
+                'values': [32]  # valores de batch size a serem testados
             },
             'learning_rate': {
-                'min': 5e-6,           # valor mínimo da learning rate
-                'max': 5e-4            # valor máximo da learning rate
+                'min': 1e-5,           # valor mínimo da learning rate
+                'max': 1e-4            # valor máximo da learning rate
             }
         }
     }
@@ -111,4 +113,6 @@ if __name__ == "__main__":
     sweep_id = wandb.sweep(sweep_config, project="swedish_classification_with_lightning")
 
     # Executar o sweep
-    wandb.agent(sweep_id, function=train_model, count=16)  # Executa o sweep com 10 variações
+    wandb.agent(sweep_id, function=train_model, count=2)  # Executa o sweep com 10 variações
+
+    wandb.finish()
