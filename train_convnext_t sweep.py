@@ -35,7 +35,7 @@ def train_model(config=None):
     hyperparams = load_hyperparameters('/home/rodrigo/Documentos/mestrado/GitHub/config.yaml')
 
     # Inicializar o wandb e acessar os parâmetros variáveis (do sweep)
-    with wandb.init(project="swedish_classification_with_lightning") as run:
+    with wandb.init(project="swedish_classification_with_lightning", config=config):
         config_sweep = wandb.config  # Acessar os parâmetros variáveis do sweep
 
         # Definir o data module com os hiperparâmetros fixos e os do sweep
@@ -94,7 +94,7 @@ if __name__ == "__main__":
     sweep_config = {
         'method': 'random',  # método de busca aleatória
         'metric': {
-            'name': 'val_acc',
+            'name': 'val_accuracy',
             'goal': 'maximize'  # otimizar a acurácia de validação
         },
         'parameters': {

@@ -37,94 +37,105 @@ class CustomModel(pl.LightningModule):
         self.optimizer_momentum = optimizer_momentum
         self.fn_loss = nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)
         
-        self.model = self.chose_model(tmodel)
-
-
+        # self.model = self.chose_model(tmodel)
+        # =====================================================================
+        
+        self.model = models.convnext_tiny(weights=ConvNeXt_Tiny_Weights.DEFAULT, 
+                                        drop_path_rate=self.drop_path_rate)
+        self.sequential_layers = nn.Sequential(
+            nn.Flatten(start_dim=1),
+            nn.LayerNorm(768, eps=1e-6, elementwise_affine=True),
+            nn.Linear(in_features=768, out_features=self.num_classes, bias=True)
+        )
+        self.model.classifier = self.sequential_layers
+        
+        # ==============================================================================
+        
         # Métricas
         self.train_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
         self.val_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
         self.test_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
 
-    def chose_model(self, tmodel):
-                # Carregar os modelos ConvNeXt's com pesos pré-treinados
-        if tmodel == "convnext_t":
-            self.model = models.convnext_tiny(weights=ConvNeXt_Tiny_Weights.DEFAULT, 
-                                            drop_path_rate=self.drop_path_rate)
-            self.sequential_layers = nn.Sequential(
-                nn.Flatten(start_dim=1),
-                nn.LayerNorm(768, eps=1e-6, elementwise_affine=True),
-                nn.Linear(in_features=768, out_features=self.num_classes, bias=True)
-            )
-            self.model.classifier = self.sequential_layers
+    # def chose_model(self, tmodel):
+    #             # Carregar os modelos ConvNeXt's com pesos pré-treinados
+    #     if tmodel == "convnext_t":
+    #         self.model = models.convnext_tiny(weights=ConvNeXt_Tiny_Weights.DEFAULT, 
+    #                                         drop_path_rate=self.drop_path_rate)
+    #         self.sequential_layers = nn.Sequential(
+    #             nn.Flatten(start_dim=1),
+    #             nn.LayerNorm(768, eps=1e-6, elementwise_affine=True),
+    #             nn.Linear(in_features=768, out_features=self.num_classes, bias=True)
+    #         )
+    #         self.model.classifier = self.sequential_layers
         
-        if tmodel == "convnext_s":
-            self.model = models.convnext_small(weights=ConvNeXt_Small_Weights.DEFAULT, 
-                                            drop_path_rate=self.drop_path_rate)
-            self.sequential_layers = nn.Sequential(
-                nn.Flatten(start_dim=1),
-                nn.LayerNorm(768, eps=1e-6, elementwise_affine=True),
-                nn.Linear(in_features=768, out_features=self.num_classes, bias=True)
-            )
-            self.model.classifier = self.sequential_layers
+    #     if tmodel == "convnext_s":
+    #         self.model = models.convnext_small(weights=ConvNeXt_Small_Weights.DEFAULT, 
+    #                                         drop_path_rate=self.drop_path_rate)
+    #         self.sequential_layers = nn.Sequential(
+    #             nn.Flatten(start_dim=1),
+    #             nn.LayerNorm(768, eps=1e-6, elementwise_affine=True),
+    #             nn.Linear(in_features=768, out_features=self.num_classes, bias=True)
+    #         )
+    #         self.model.classifier = self.sequential_layers
 
-        if tmodel == "convnext_b":
-            self.model = models.convnext_base(weights=ConvNeXt_Base_Weights.DEFAULT,
-                                              drop_path_rate = self.drop_path_rate)
-            self.sequential_layers = nn.Sequential(
-                nn.Flatten(start_dim=1),
-                nn.LayerNorm(1024, eps=1e-6, elementwise_affine=True),
-                nn.Linear(in_features=1024, out_features=self.fnum_classes, bias=True)
-            )
-            self.model.classifier = self.sequential_layers
+    #     if tmodel == "convnext_b":
+    #         self.model = models.convnext_base(weights=ConvNeXt_Base_Weights.DEFAULT,
+    #                                           drop_path_rate = self.drop_path_rate)
+    #         self.sequential_layers = nn.Sequential(
+    #             nn.Flatten(start_dim=1),
+    #             nn.LayerNorm(1024, eps=1e-6, elementwise_affine=True),
+    #             nn.Linear(in_features=1024, out_features=self.fnum_classes, bias=True)
+    #         )
+    #         self.model.classifier = self.sequential_layers
 
-        if tmodel == "convnext_l":
-            self.model = models.convnext_large(weights=ConvNeXt_Large_Weights.DEFAULT, 
-                                    drop_path_rate=self.drop_path_rate)
-            self.sequential_layers = nn.Sequential(
-                nn.Flatten(start_dim=1),
-                nn.LayerNorm(1536, eps=1e-6, elementwise_affine=True),
-                nn.Linear(in_features=1536, out_features=self.num_classes, bias=True)
-            )
-            self.model.classifier = self.sequential_layers
+    #     if tmodel == "convnext_l":
+    #         self.model = models.convnext_large(weights=ConvNeXt_Large_Weights.DEFAULT, 
+    #                                 drop_path_rate=self.drop_path_rate)
+    #         self.sequential_layers = nn.Sequential(
+    #             nn.Flatten(start_dim=1),
+    #             nn.LayerNorm(1536, eps=1e-6, elementwise_affine=True),
+    #             nn.Linear(in_features=1536, out_features=self.num_classes, bias=True)
+    #         )
+    #         self.model.classifier = self.sequential_layers
 
-        if tmodel == "swintrans_t":
-            self.model = swin_t(weights=Swin_T_Weights.DEFAULT)
-            self.model.head = nn.Linear(in_features=768, out_features=self.num_classes, bias=True)
+    #     if tmodel == "swintrans_t":
+    #         self.model = swin_t(weights=Swin_T_Weights.DEFAULT)
+    #         self.model.head = nn.Linear(in_features=768, out_features=self.num_classes, bias=True)
 
-        if tmodel == "swintrans_s":
-            self.model = swin_s(weights=Swin_S_Weights.DEFAULT)
-            self.model.head = nn.Linear(in_features=768, out_features=self.num_classes, bias=True)
+    #     if tmodel == "swintrans_s":
+    #         self.model = swin_s(weights=Swin_S_Weights.DEFAULT)
+    #         self.model.head = nn.Linear(in_features=768, out_features=self.num_classes, bias=True)
 
-        if tmodel == "swintrans_b":
-            self.model = swin_b(weights = Swin_B_Weights.DEFAULT)
-            self.model.head = nn.Linear(in_features=1024, out_features=self.num_classes, bias=True)
+    #     if tmodel == "swintrans_b":
+    #         self.model = swin_b(weights = Swin_B_Weights.DEFAULT)
+    #         self.model.head = nn.Linear(in_features=1024, out_features=self.num_classes, bias=True)
         
-        if tmodel == "cct_224":
-            self.model = cct_14_7x2_224(pretrained=True, progress=True)
-            self.sequential_layers = nn.Sequential(
-                nn.Flatten(start_dim=1),
-                nn.LayerNorm(384, eps=1e-6, elementwise_affine=True),
-                nn.Linear(in_features=384, out_features=self.num_classes, bias=True)
-            )
-            self.model.classifier.fc = self.sequential_layers
+    #     if tmodel == "cct_224":
+    #         self.model = cct_14_7x2_224(pretrained=True, progress=True)
+    #         self.sequential_layers = nn.Sequential(
+    #             nn.Flatten(start_dim=1),
+    #             nn.LayerNorm(384, eps=1e-6, elementwise_affine=True),
+    #             nn.Linear(in_features=384, out_features=self.num_classes, bias=True)
+    #         )
+    #         self.model.classifier.fc = self.sequential_layers
 
-        if tmodel == "cct_384":
-            self.model = cct_14_7x2_384(pretrained=True, progress=True)
-            self.sequential_layers = nn.Sequential(
-            nn.Flatten(start_dim=1),
-            nn.LayerNorm(384, eps=1e-6, elementwise_affine=True),
-            nn.Linear(in_features=384, out_features=self.num_classes, bias=True)
-        )
-            self.model.classifier.fc = self.sequential_layers
+    #     if tmodel == "cct_384":
+    #         self.model = cct_14_7x2_384(pretrained=True, progress=True)
+    #         self.sequential_layers = nn.Sequential(
+    #         nn.Flatten(start_dim=1),
+    #         nn.LayerNorm(384, eps=1e-6, elementwise_affine=True),
+    #         nn.Linear(in_features=384, out_features=self.num_classes, bias=True)
+    #     )
+    #         self.model.classifier.fc = self.sequential_layers
 
-        if tmodel == "cct_384_fl":
-            self.model = cct_14_7x2_384_fl(pretrained=True, progress=True)
-            self.sequential_layers = nn.Sequential(
-            nn.Flatten(start_dim=1),
-            nn.LayerNorm(384, eps=1e-6, elementwise_affine=True),
-            nn.Linear(in_features=384, out_features=self.num_classes, bias=True)
-        )
-            self.model.classifier.fc = self.sequential_layers
+    #     if tmodel == "cct_384_fl":
+    #         self.model = cct_14_7x2_384_fl(pretrained=True, progress=True)
+    #         self.sequential_layers = nn.Sequential(
+    #         nn.Flatten(start_dim=1),
+    #         nn.LayerNorm(384, eps=1e-6, elementwise_affine=True),
+    #         nn.Linear(in_features=384, out_features=self.num_classes, bias=True)
+    #     )
+    #         self.model.classifier.fc = self.sequential_layers
 
 
     def forward(self, x):
@@ -212,7 +223,7 @@ class CustomModel(pl.LightningModule):
 
     def configure_optimizers(self):
         # Definir o otimizador com os grupos de parâmetros
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate, momentum = self.optimizer_momentum)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate, betas = self.optimizer_momentum)
 
         # Definir o scheduler
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.epochs)
