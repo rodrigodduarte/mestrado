@@ -1,1 +1,10 @@
-convnext_t: 384 -> 64
+(max batch size)
+
+convnext 
+t: 32 	27.8 M    Trainable params
+s: 32	49.5 M    Trainable params
+b: 16	87.6 M    Trainable params
+
+CCT 384
+u: 32   22.1 M    Trainable params
+
