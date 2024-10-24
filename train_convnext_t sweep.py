@@ -32,7 +32,7 @@ def set_random_seeds():
 
 
 def train_model(config=None):
-    hyperparams = load_hyperparameters('/home/rodrigoduarte/Documentos/projeto/config.yaml')
+    hyperparams = load_hyperparameters('config.yaml')
 
     # Inicializar o wandb e acessar os parâmetros variáveis (do sweep)
     with wandb.init(project="swedish_classification_with_lightning", config=config):
@@ -70,8 +70,7 @@ def train_model(config=None):
             devices=hyperparams['DEVICES'],          # Fixo
             precision=hyperparams['PRECISION'],      # Fixo
             max_epochs=hyperparams['MAX_EPOCHS'],    # Fixo
-            callbacks=[TQDMProgressBar(leave=True)],
-            strategy="ddp"
+            callbacks=[TQDMProgressBar(leave=True)]
         )
 
         # Treinando o modelo
@@ -99,7 +98,7 @@ if __name__ == "__main__":
         },
         'parameters': {
             'batch_size': {
-                'values': [8, 16, 32]  # valores de batch size a serem testados
+                'values': [8]  # valores de batch size a serem testados
             },
             'learning_rate': {
                 'min': 5e-6,           # valor mínimo da learning rate
