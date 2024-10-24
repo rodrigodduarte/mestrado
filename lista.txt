@@ -1,1 +1,1 @@
-convnext_t: 364 -> 64
+convnext_t: 384 -> 64

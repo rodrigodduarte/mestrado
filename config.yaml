@@ -1,10 +1,10 @@
 # Caminhos dos diretórios de treino e teste
-TRAIN_DIR: "/home/rodrigo/Documentos/mestrado/GitHub/imagens/swedish/train"
-TEST_DIR: "/home/rodrigo/Documentos/mestrado/GitHub/imagens/swedish/test"
+TRAIN_DIR: "imagens/swedish/train"
+TEST_DIR: "imagens/swedish/test"
 
 # Hiperparâmetros relacionados à configuração do modelo
-SHAPE: [224, 224]
-MAX_EPOCHS: 1
+SHAPE: [384, 384]
+MAX_EPOCHS: 50
 NUM_CLASSES: 15
 BATCH_SIZE: 8  # Valor padrão (será sobrescrito pelo sweep)
 LEARNING_RATE: 5e-5  # Valor padrão (será sobrescrito pelo sweep)
@@ -17,5 +17,5 @@ LABEL_SMOOTHING: 0.1
 # Configurações de hardware e execução
 NUM_WORKERS: 4
 ACCELERATOR: "gpu"
-DEVICES: -1
+DEVICES: [0]
 PRECISION: "16-mixed"
