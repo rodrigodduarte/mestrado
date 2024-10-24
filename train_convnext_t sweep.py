@@ -72,8 +72,6 @@ def train_model(config=None):
             precision=hyperparams['PRECISION'],      # Fixo
             max_epochs=hyperparams['MAX_EPOCHS'],    # Fixo
             callbacks=[TQDMProgressBar(leave=True)],
-            num_nodes=1,
-            strategy=pl.strategies.DDPStrategy(find_unused_parameters=False, gradient_as_bucket_view=True),
         )
 
         # Treinando o modelo
@@ -100,7 +98,7 @@ if __name__ == "__main__":
         },
         'parameters': {
             'batch_size': {
-                'values': [32]  # valores de batch size a serem testados
+                'values': [8]  # valores de batch size a serem testados
             },
             'learning_rate': {
                 'min': 1e-5,           # valor mínimo da learning rate
