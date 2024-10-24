@@ -8,7 +8,7 @@ from pytorch_lightning.profilers import PyTorchProfiler
 from model import CustomModel
 from dataset import CustomImageModule
 import config as config
-from callbacks import EarlyStoppingAtPerfectAccuracy
+from callbacks import CustomEarlyStopping
 
 import wandb
 from pytorch_lightning.loggers import WandbLogger
@@ -65,20 +65,12 @@ def train_model(config=None):
 
         # Configurar o callback de Early Stopping
         early_stopping = EarlyStopping(
-            monitor='val_accuracy',  # Monitorar a acurácia de validação
+            monitor='val_loss',  # Monitorar a acurácia de validação
             patience=5,              # Número de épocas para esperar antes de parar
             verbose=True,            # Exibir mensagens sobre o que está acontecendo
-            mode='max'               # 'max' para acurácia (procurando maximizar)
+            mode='min'               # 'max' para acurácia (procurando maximizar)
         )
 
-        # Configurar o callback de Model Checkpoint
-        checkpoint_callback = ModelCheckpoint(
-            monitor='val_accuracy',  # Monitorar a acurácia de validação
-            mode='max',              # 'max' porque queremos a melhor acurácia
-            save_top_k=1,           # Salvar apenas o melhor modelo
-            filename='best_model',   # Nome do arquivo do modelo salvo
-            verbose=True             # Exibir mensagens sobre o que está acontecendo
-        )
         # Configurar o Trainer do PyTorch Lightning
         trainer = pl.Trainer(
             logger=wandb_logger,    # W&B integration
@@ -89,9 +81,8 @@ def train_model(config=None):
             max_epochs=hyperparams['MAX_EPOCHS'],    # Fixo
             callbacks=[
                 TQDMProgressBar(leave=True),
-                EarlyStoppingAtPerfectAccuracy(),
-                early_stopping,
-                checkpoint_callback],
+                CustomEarlyStopping(),
+                early_stopping],
         )
 
         # Treinando o modelo
@@ -118,7 +109,7 @@ if __name__ == "__main__":
         },
         'parameters': {
             'batch_size': {
-                'values': [32]  # valores de batch size a serem testados
+                'values': [16, 32]  # valores de batch size a serem testados
             },
             'learning_rate': {
                 'min': 1e-5,           # valor mínimo da learning rate
