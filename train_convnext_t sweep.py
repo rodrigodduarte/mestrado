@@ -32,7 +32,7 @@ def set_random_seeds():
 
 
 def train_model(config=None):
-    hyperparams = load_hyperparameters('/home/rodrigo/Documentos/mestrado/GitHub/config.yaml')
+    hyperparams = load_hyperparameters('/home/rodrigoduarte/Documentos/projeto/config.yaml')
 
     # Inicializar o wandb e acessar os parâmetros variáveis (do sweep)
     with wandb.init(project="swedish_classification_with_lightning", config=config):
@@ -57,7 +57,8 @@ def train_model(config=None):
             num_classes=hyperparams['NUM_CLASSES'],         # Fixo
             label_smoothing=hyperparams['LABEL_SMOOTHING'],
             optimizer_momentum=hyperparams['OPTIMIZER_MOMENTUM']  # Fixo
-        )
+        )  
+        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
 
         # Configurar o logger do W&B
         wandb_logger = WandbLogger(project="swedish_classification_with_lightning")
@@ -65,13 +66,12 @@ def train_model(config=None):
         # Configurar o Trainer do PyTorch Lightning
         trainer = pl.Trainer(
             logger=wandb_logger,    # W&B integration
-            log_every_n_steps=50,   # set the logging frequency
-            profiler="simple",
             accelerator=hyperparams['ACCELERATOR'],  # Fixo
             devices=hyperparams['DEVICES'],          # Fixo
             precision=hyperparams['PRECISION'],      # Fixo
             max_epochs=hyperparams['MAX_EPOCHS'],    # Fixo
-            callbacks=[TQDMProgressBar(leave=True)]
+            callbacks=[TQDMProgressBar(leave=True)],
+            strategy="ddp"
         )
 
         # Treinando o modelo
@@ -102,8 +102,8 @@ if __name__ == "__main__":
                 'values': [8, 16, 32]  # valores de batch size a serem testados
             },
             'learning_rate': {
-                'min': 1e-5,           # valor mínimo da learning rate
-                'max': 1e-3            # valor máximo da learning rate
+                'min': 5e-6,           # valor mínimo da learning rate
+                'max': 5e-4            # valor máximo da learning rate
             }
         }
     }
@@ -112,4 +112,4 @@ if __name__ == "__main__":
     sweep_id = wandb.sweep(sweep_config, project="swedish_classification_with_lightning")
 
     # Executar o sweep
-    wandb.agent(sweep_id, function=train_model, count=10)  # Executa o sweep com 10 variações
+    wandb.agent(sweep_id, function=train_model, count=16)  # Executa o sweep com 10 variações

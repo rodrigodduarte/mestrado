@@ -1,6 +1,6 @@
 # Caminhos dos diretórios de treino e teste
-TRAIN_DIR: "/home/rodrigo/Documentos/mestrado/GitHub/imagens/swedish/train"
-TEST_DIR: "/home/rodrigo/Documentos/mestrado/GitHub/imagens/swedish/test"
+TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swedish/train"
+TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swedish/test"
 
 # Hiperparâmetros relacionados à configuração do modelo
 SHAPE: [384, 384]
@@ -15,7 +15,7 @@ DROP_PATH_RATE: 0.1
 LABEL_SMOOTHING: 0.1
 
 # Configurações de hardware e execução
-NUM_WORKERS: 4
+NUM_WORKERS: 6
 ACCELERATOR: "gpu"
-DEVICES: 1
+DEVICES: 2
 PRECISION: "16-mixed"

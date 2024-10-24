@@ -152,8 +152,8 @@ class CustomModel(pl.LightningModule):
         self.train_accuracy(preds, labels)
         
         # Logar a perda e a acurácia
-        self.log('train_loss', loss, prog_bar=True, on_step=False, on_epoch=True)
-        self.log('train_accuracy', self.train_accuracy, prog_bar=True, on_step=False, on_epoch=True)
+        self.log('train_loss', loss, prog_bar=True, on_step=False, on_epoch=True, sync_dist=True)
+        self.log('train_accuracy', self.train_accuracy, prog_bar=True, on_step=False, on_epoch=True, sync_dist=True)
         
         # Retornar a perda para o processamento posterior
         return {'loss': loss}
@@ -169,8 +169,8 @@ class CustomModel(pl.LightningModule):
         self.val_accuracy(preds, labels)
         
         # Logar a perda e a acurácia no conjunto de validação
-        self.log('val_loss', loss, prog_bar=True, on_epoch=True)
-        self.log('val_accuracy', self.val_accuracy, prog_bar=True, on_epoch=True)
+        self.log('val_loss', loss, prog_bar=True, on_epoch=True, sync_dist=True)
+        self.log('val_accuracy', self.val_accuracy, prog_bar=True, on_epoch=True, sync_dist=True)
         
         # Retornar a perda e a acurácia
         return {'val_loss': loss}
@@ -198,8 +198,8 @@ class CustomModel(pl.LightningModule):
 
         # Calcular a precisão
         self.test_accuracy(preds, labels)
-        self.log("test/loss_epoch", loss, on_step=False, on_epoch=True)
-        self.log("test/acc_epoch", self.test_accuracy, on_step=False, on_epoch=True)
+        self.log("test/loss_epoch", loss, on_step=False, on_epoch=True, sync_dist=True)
+        self.log("test/acc_epoch", self.test_accuracy, on_step=False, on_epoch=True, sync_dist=True)
 
 
     def configure_optimizers(self):
