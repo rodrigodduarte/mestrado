@@ -1,15 +1,18 @@
 import torch
 from torch.utils.data import DataLoader, random_split, Dataset, ConcatDataset
 import pandas as pd
+import numpy as np
 
 import torchvision
-from torchvision import datasets
+from torchvision import datasets, transforms
 from torchvision.transforms import v2
 
 import pytorch_lightning as pl
 
 import PIL
 import os
+
+from sklearn.preprocessing import LabelEncoder
 
 
 class CustomImageModule(pl.LightningDataModule):
@@ -77,69 +80,96 @@ class CustomImageModule(pl.LightningDataModule):
         )
     
 
-class CustomTabularDataset(Dataset):
-    def __init__(self, csv_file):
-        # Carrega o CSV e converte para tensor
-        data = pd.read_csv(csv_file)
-        self.features = torch.tensor(data.iloc[:, :-1].values, dtype=torch.float32)  # Todas as colunas, exceto a última (assumindo que a última é o rótulo)
-        self.labels = torch.tensor(data.iloc[:, -1].values, dtype=torch.long)         # A última coluna como rótulo
+class CSVDataLoader(Dataset):
+    def __init__(self, data_dir, transform=None):
+        """
+        Dataset para carregar arquivos CSV organizados por classe.
+        
+        Args:
+            data_dir (str): Diretório contendo os dados das classes.
+            transform (callable, optional): Transformações a serem aplicadas nos dados.
+        """
+        self.data_dir = data_dir
+        self.transform = transform
+        self.data = []
+        self.labels = []
+        self.class_names = os.listdir(data_dir)
+        self.label_encoder = LabelEncoder()
+        self.label_encoder.fit(self.class_names)
+
+        # Carregar dados de cada arquivo CSV
+        for class_idx, class_name in enumerate(self.class_names):
+            class_path = os.path.join(data_dir, class_name)
+            for csv_file in os.listdir(class_path):
+                if csv_file.endswith(".csv"):
+                    csv_path = os.path.join(class_path, csv_file)
+                    # Carregar os dados do CSV
+                    df = pd.read_csv(csv_path)
+                    features = df.values  # Assumindo que os dados estejam em um formato adequado
+                    labels = [class_idx] * len(df)
+                    self.data.append(features)
+                    self.labels.append(labels)
+
+        # Converter as listas para arrays
+        self.data = torch.tensor(np.concatenate(self.data, axis=0), dtype=torch.float32)
+        self.labels = torch.tensor(np.concatenate(self.labels, axis=0), dtype=torch.long)
 
     def __len__(self):
-        return len(self.labels)
+        return len(self.data)
 
     def __getitem__(self, idx):
-        return self.features[idx], self.labels[idx]
+        sample = self.data[idx]
+        label = self.labels[idx]
+
+        if self.transform:
+            sample = self.transform(sample)
+        
+        return sample, label
 
 
-class CustomDataModule(pl.LightningDataModule):
-    def __init__(self, root_dir, batch_size, num_workers):
+class CSVDataModule(pl.LightningDataModule):
+    def __init__(self, train_dir, test_dir, batch_size=32, num_workers=4):
+        """
+        DataModule para carregar o dataset Swedish, com diretórios separados para treino e teste.
+        
+        Args:
+            train_dir (str): Diretório com dados de treino.
+            test_dir (str): Diretório com dados de teste.
+            batch_size (int): Tamanho do batch.
+            num_workers (int): Número de workers para o DataLoader.
+        """
         super().__init__()
-        self.root_dir = root_dir
+        self.train_dir = train_dir
+        self.test_dir = test_dir
         self.batch_size = batch_size
         self.num_workers = num_workers
 
+        # Transformações (se necessário)
+        self.transform = transforms.Compose([
+            # Aqui, você pode adicionar transformações específicas para seus dados
+        ])
+
     def setup(self, stage=None):
-        """Setup training, validation, and test datasets."""
-        if stage == "fit" or stage is None:
-            train_dir = os.path.join(self.root_dir, 'train')
-            train_datasets = [CustomTabularDataset(os.path.join(train_dir, csv_file))
-                              for csv_file in os.listdir(train_dir) if csv_file.endswith('.csv')]
-            entire_train_dataset = ConcatDataset(train_datasets)
-
-            # Divide o dataset em treino e validação (80-20 split)
-            train_size = int(0.8 * len(entire_train_dataset))
-            val_size = len(entire_train_dataset) - train_size
-            self.train_ds, self.val_ds = random_split(entire_train_dataset, [train_size, val_size])
-
-        if stage == "test" or stage is None:
-            test_dir = os.path.join(self.root_dir, 'test')
-            test_datasets = [CustomTabularDataset(os.path.join(test_dir, csv_file))
-                             for csv_file in os.listdir(test_dir) if csv_file.endswith('.csv')]
-            self.test_ds = ConcatDataset(test_datasets)
+        """
+        Configura os datasets de treino e teste.
+        """
+        self.train_dataset = CSVDataLoader(data_dir=self.train_dir, transform=self.transform)
+        self.test_dataset = CSVDataLoader(data_dir=self.test_dir, transform=self.transform)
 
     def train_dataloader(self):
-        """Retorna o data loader para treino."""
-        return DataLoader(
-            self.train_ds,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            shuffle=True
-        )
-    
+        """
+        Retorna o DataLoader para o treino.
+        """
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)
+
     def val_dataloader(self):
-        """Retorna o data loader para validação."""
-        return DataLoader(
-            self.val_ds,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            shuffle=False
-        )
-    
+        """
+        Retorna o DataLoader para a validação/teste.
+        """
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
+
     def test_dataloader(self):
-        """Retorna o data loader para teste."""
-        return DataLoader(
-            self.test_ds,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            shuffle=False
-        )
+        """
+        Retorna o DataLoader para o teste.
+        """
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=self.num_workers)

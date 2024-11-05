@@ -2,12 +2,15 @@ import torch
 import pytorch_lightning as pl
 import numpy as np
 from pytorch_lightning.callbacks import TQDMProgressBar, EarlyStopping
+
 from model import CustomModel
-from dataset import CustomDataModule
+from dataset import CSVDataLoader, CSVDataModule
 import config as config
 from callbacks import ImagesPerSecondCallback
+
 import wandb
 from pytorch_lightning.loggers import WandbLogger
+
 import random
 import yaml
 
@@ -35,9 +38,10 @@ def train_model(config=None):
         config_sweep = wandb.config  # Acessar os parâmetros variáveis do sweep
 
         # Definir o data module com o diretório raiz e parâmetros do sweep
-        data_module = CustomDataModule(
-            root_dir=hyperparams['ROOT_DIR'],     # Diretório raiz que contém 'train' e 'test'
-            batch_size=config_sweep.batch_size,   # Batch size variável do sweep
+        data_module = CSVDataModule(
+            train_dir=hyperparams['TRAIN_DIR'],  # Diretório de treino
+            test_dir=hyperparams['TEST_DIR'],    # Diretório de teste
+            batch_size=config_sweep.batch_size,  # Batch size variável do sweep
             num_workers=hyperparams['NUM_WORKERS']  # Fixo
         )
 
