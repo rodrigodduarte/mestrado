@@ -36,7 +36,7 @@ def train_model(config=None):
     hyperparams = load_hyperparameters('config.yaml')
 
     # Inicializar o wandb e acessar os parâmetros variáveis (do sweep)
-    with wandb.init(project="swedish_convnext_s_224", config=config):
+    with wandb.init(project="swedish_cct_224", config=config):
         config_sweep = wandb.config  # Acessar os parâmetros variáveis do sweep
 
         # Definir o data module com os hiperparâmetros fixos e os do sweep
@@ -50,7 +50,7 @@ def train_model(config=None):
 
         # Configurar o modelo com os parâmetros fixos e os variáveis do sweep
         model = CustomModel(
-            tmodel="convnext_s",
+            tmodel="cct_224",
             epochs=hyperparams['MAX_EPOCHS'],               # Fixo
             learning_rate=config_sweep.learning_rate,       # Variável do sweep
             scale_factor=hyperparams['SCALE_FACTOR'],       # Fixo
@@ -61,7 +61,7 @@ def train_model(config=None):
         )  
 
         # Configurar o logger do W&B
-        wandb_logger = WandbLogger(project="swedish_convnext_s_224")
+        wandb_logger = WandbLogger(project="swedish_cct_224")
 
         # Configurar o callback de Early Stopping
         early_stopping = EarlyStopping(
@@ -70,6 +70,7 @@ def train_model(config=None):
             verbose=True,            # Exibir mensagens sobre o que está acontecendo
             mode='min'               # 'max' para acurácia (procurando maximizar)
         )
+
         # Configurar o Trainer do PyTorch Lightning
         trainer = pl.Trainer(
             logger=wandb_logger,    # W&B integration
@@ -108,7 +109,7 @@ if __name__ == "__main__":
         },
         'parameters': {
             'batch_size': {
-                'values': [16, 32]  # valores de batch size a serem testados
+                'values': [32, 64]  # valores de batch size a serem testados
             },
             'learning_rate': {
                 'min': 1e-5,           # valor mínimo da learning rate
@@ -118,9 +119,9 @@ if __name__ == "__main__":
     }
 
     # Criar o sweep no W&B
-    sweep_id = wandb.sweep(sweep_config, project="swedish_convnext_s_224")
+    sweep_id = wandb.sweep(sweep_config, project="swedish_cct_224")
 
     # Executar o sweep
-    wandb.agent(sweep_id, function=train_model, count=25)  # Executa o sweep com 10 variações
+    wandb.agent(sweep_id, function=train_model, count=30)  # Executa o sweep com 10 variações
 
     wandb.finish()

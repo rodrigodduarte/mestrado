@@ -18,5 +18,5 @@ LABEL_SMOOTHING: 0.1
 # Configurações de hardware e execução
 NUM_WORKERS: 4
 ACCELERATOR: "gpu"
-DEVICES: [0]
+DEVICES: [1]
 PRECISION: "16-mixed"

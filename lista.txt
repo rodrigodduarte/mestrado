@@ -1,10 +1,23 @@
 (max batch size)
+GPU - Titan V
 
 convnext 
+224
+t:
+s:
+b:
+384
 t: 32 	27.8 M    Trainable params
 s: 32	49.5 M    Trainable params
 b: 16	87.6 M    Trainable params
 
-CCT 384
+cct 
+224
+u: 64   22.0 M    Trainable params
+384
 u: 32   22.1 M    Trainable params
 
+swint
+t: 32	27.5 M    Trainable params
+s: 16	48.8 M    Trainable params
+b: 16	86.8 M    Trainable params

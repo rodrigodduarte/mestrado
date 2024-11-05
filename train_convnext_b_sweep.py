@@ -8,7 +8,7 @@ from pytorch_lightning.profilers import PyTorchProfiler
 from model import CustomModel
 from dataset import CustomImageModule
 import config as config
-from callbacks import EarlyStoppingAtPerfectAccuracy
+from callbacks import CustomEarlyStopping, ImagesPerSecondCallback
 
 import wandb
 from pytorch_lightning.loggers import WandbLogger
@@ -36,7 +36,7 @@ def train_model(config=None):
     hyperparams = load_hyperparameters('config.yaml')
 
     # Inicializar o wandb e acessar os parâmetros variáveis (do sweep)
-    with wandb.init(project="swedish_classification_with_lightning", config=config):
+    with wandb.init(project="swedish_convnext_b_224", config=config):
         config_sweep = wandb.config  # Acessar os parâmetros variáveis do sweep
 
         # Definir o data module com os hiperparâmetros fixos e os do sweep
@@ -61,24 +61,16 @@ def train_model(config=None):
         )  
 
         # Configurar o logger do W&B
-        wandb_logger = WandbLogger(project="swedish_classification_with_lightning")
+        wandb_logger = WandbLogger(project="swedish_convnext_b_224")
 
         # Configurar o callback de Early Stopping
         early_stopping = EarlyStopping(
             monitor='val_accuracy',  # Monitorar a acurácia de validação
-            patience=5,              # Número de épocas para esperar antes de parar
+            patience=15,              # Número de épocas para esperar antes de parar
             verbose=True,            # Exibir mensagens sobre o que está acontecendo
             mode='max'               # 'max' para acurácia (procurando maximizar)
         )
 
-        # Configurar o callback de Model Checkpoint
-        checkpoint_callback = ModelCheckpoint(
-            monitor='val_accuracy',  # Monitorar a acurácia de validação
-            mode='max',              # 'max' porque queremos a melhor acurácia
-            save_top_k=1,           # Salvar apenas o melhor modelo
-            filename='best_model',   # Nome do arquivo do modelo salvo
-            verbose=True             # Exibir mensagens sobre o que está acontecendo
-        )
         # Configurar o Trainer do PyTorch Lightning
         trainer = pl.Trainer(
             logger=wandb_logger,    # W&B integration
@@ -89,9 +81,8 @@ def train_model(config=None):
             max_epochs=hyperparams['MAX_EPOCHS'],    # Fixo
             callbacks=[
                 TQDMProgressBar(leave=True),
-                EarlyStoppingAtPerfectAccuracy(),
                 early_stopping,
-                checkpoint_callback],
+                ImagesPerSecondCallback()]
         )
 
         # Treinando o modelo
@@ -99,6 +90,8 @@ def train_model(config=None):
 
         # Testando o modelo
         trainer.test(model, data_module)
+
+
 
         wandb.finish()
 
@@ -128,9 +121,9 @@ if __name__ == "__main__":
     }
 
     # Criar o sweep no W&B
-    sweep_id = wandb.sweep(sweep_config, project="swedish_classification_with_lightning")
+    sweep_id = wandb.sweep(sweep_config, project="swedish_convnext_b_224")
 
     # Executar o sweep
-    wandb.agent(sweep_id, function=train_model, count=20)  # Executa o sweep com 10 variações
+    wandb.agent(sweep_id, function=train_model, count=25)  # Executa o sweep com 10 variações
 
     wandb.finish()

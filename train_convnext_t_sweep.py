@@ -2,13 +2,13 @@ import torch
 import pytorch_lightning as pl
 import numpy as np
 
-from pytorch_lightning.callbacks import TQDMProgressBar, EarlyStopping, ModelCheckpoint
+from pytorch_lightning.callbacks import TQDMProgressBar, EarlyStopping, ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning.profilers import PyTorchProfiler
 
 from model import CustomModel
 from dataset import CustomImageModule
 import config as config
-from callbacks import CustomEarlyStopping
+from callbacks import CustomEarlyStopping, ImagesPerSecondCallback
 
 import wandb
 from pytorch_lightning.loggers import WandbLogger
@@ -33,10 +33,10 @@ def set_random_seeds():
 
 
 def train_model(config=None):
-    hyperparams = load_hyperparameters('config.yaml')
+    hyperparams = load_hyperparameters('config2.yaml')
 
     # Inicializar o wandb e acessar os parâmetros variáveis (do sweep)
-    with wandb.init(project="swedish_classification_with_lightning", config=config):
+    with wandb.init(project="swedish_convnext_t_224", config=config):
         config_sweep = wandb.config  # Acessar os parâmetros variáveis do sweep
 
         # Definir o data module com os hiperparâmetros fixos e os do sweep
@@ -61,15 +61,16 @@ def train_model(config=None):
         )  
 
         # Configurar o logger do W&B
-        wandb_logger = WandbLogger(project="swedish_classification_with_lightning")
+        wandb_logger = WandbLogger(project="swedish_convnext_t_224")
 
         # Configurar o callback de Early Stopping
         early_stopping = EarlyStopping(
             monitor='val_loss',  # Monitorar a acurácia de validação
-            patience=5,              # Número de épocas para esperar antes de parar
+            patience=15,              # Número de épocas para esperar antes de parar
             verbose=True,            # Exibir mensagens sobre o que está acontecendo
             mode='min'               # 'max' para acurácia (procurando maximizar)
         )
+
 
         # Configurar o Trainer do PyTorch Lightning
         trainer = pl.Trainer(
@@ -81,8 +82,8 @@ def train_model(config=None):
             max_epochs=hyperparams['MAX_EPOCHS'],    # Fixo
             callbacks=[
                 TQDMProgressBar(leave=True),
-                CustomEarlyStopping(),
-                early_stopping],
+                early_stopping,
+                ImagesPerSecondCallback()]
         )
 
         # Treinando o modelo
@@ -91,6 +92,7 @@ def train_model(config=None):
         # Testando o modelo
         trainer.test(model, data_module)
 
+        # Finalizando
         wandb.finish()
 
 if __name__ == "__main__":
@@ -119,9 +121,9 @@ if __name__ == "__main__":
     }
 
     # Criar o sweep no W&B
-    sweep_id = wandb.sweep(sweep_config, project="swedish_classification_with_lightning")
+    sweep_id = wandb.sweep(sweep_config, project="swedish_convnext_t_224")
 
     # Executar o sweep
-    wandb.agent(sweep_id, function=train_model, count=20)  # Executa o sweep com 10 variações
+    wandb.agent(sweep_id, function=train_model, count=25)  # Executa o sweep com 10 variações
 
     wandb.finish()
