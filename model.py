@@ -121,7 +121,17 @@ class CustomModel(pl.LightningModule):
             nn.Linear(in_features=384, out_features=self.num_classes, bias=True)
         )
             self.model.classifier.fc = self.sequential_layers
-
+        
+        if tmodel == "mlp_ssn":
+            self.model = nn.Sequential(
+                nn.Linear(1296, 512),  # Camada de entrada para 1296
+                nn.GELU(),
+                nn.Dropout(0.5),  # Regularização
+                nn.Linear(512, 256),  # Camada oculta
+                nn.GELU(),
+                nn.Dropout(0.5),  # Regularização
+                nn.Linear(256, self.num_classes)  # Camada de saída
+            )
 
     def forward(self, x):
         return self.model(x)

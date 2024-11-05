@@ -5,7 +5,7 @@ PROJECT: "swedish_convnext_s_224"
 
 # Hiperparâmetros relacionados à configuração do modelo
 SHAPE: [224, 224]
-MAX_EPOCHS: 50
+MAX_EPOCHS: 100
 NUM_CLASSES: 15
 BATCH_SIZE: 8  # Valor padrão (será sobrescrito pelo sweep)
 LEARNING_RATE: 5e-5  # Valor padrão (será sobrescrito pelo sweep)
