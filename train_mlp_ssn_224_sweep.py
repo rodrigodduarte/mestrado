@@ -1,18 +1,13 @@
 import torch
 import pytorch_lightning as pl
 import numpy as np
-
-from pytorch_lightning.callbacks import TQDMProgressBar, EarlyStopping, ModelCheckpoint, LearningRateMonitor
-from pytorch_lightning.profilers import PyTorchProfiler
-
+from pytorch_lightning.callbacks import TQDMProgressBar, EarlyStopping
 from model import CustomModel
-from dataset import CustomImageModule
+from dataset import CustomDataModule
 import config as config
-from callbacks import CustomEarlyStopping, ImagesPerSecondCallback
-
+from callbacks import ImagesPerSecondCallback
 import wandb
 from pytorch_lightning.loggers import WandbLogger
-
 import random
 import yaml
 
@@ -39,12 +34,10 @@ def train_model(config=None):
     with wandb.init(project="swedish_mlp_ssn_224", config=config):
         config_sweep = wandb.config  # Acessar os parâmetros variáveis do sweep
 
-        # Definir o data module com os hiperparâmetros fixos e os do sweep
-        data_module = CustomImageModule(
-            train_dir=hyperparams['TRAIN_DIR'],  # Fixo
-            test_dir=hyperparams['TEST_DIR'],    # Fixo
-            shape=hyperparams['SHAPE'],          # Fixo
-            batch_size=config_sweep.batch_size,  # Variável do sweep
+        # Definir o data module com o diretório raiz e parâmetros do sweep
+        data_module = CustomDataModule(
+            root_dir=hyperparams['ROOT_DIR'],     # Diretório raiz que contém 'train' e 'test'
+            batch_size=config_sweep.batch_size,   # Batch size variável do sweep
             num_workers=hyperparams['NUM_WORKERS']  # Fixo
         )
 
@@ -68,9 +61,8 @@ def train_model(config=None):
             monitor='val_loss',  # Monitorar a acurácia de validação
             patience=15,              # Número de épocas para esperar antes de parar
             verbose=True,            # Exibir mensagens sobre o que está acontecendo
-            mode='min'               # 'max' para acurácia (procurando maximizar)
+            mode='min'               # 'min' para minimizar a perda de validação
         )
-
 
         # Configurar o Trainer do PyTorch Lightning
         trainer = pl.Trainer(
@@ -83,7 +75,8 @@ def train_model(config=None):
             callbacks=[
                 TQDMProgressBar(leave=True),
                 early_stopping,
-                ImagesPerSecondCallback()]
+                ImagesPerSecondCallback()
+            ]
         )
 
         # Treinando o modelo
@@ -124,6 +117,6 @@ if __name__ == "__main__":
     sweep_id = wandb.sweep(sweep_config, project="swedish_mlp_ssn_224")
 
     # Executar o sweep
-    wandb.agent(sweep_id, function=train_model, count=1)  # Executa o sweep com 10 variações
+    wandb.agent(sweep_id, function=train_model, count=1)
 
     wandb.finish()

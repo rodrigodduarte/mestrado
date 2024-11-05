@@ -1,4 +1,5 @@
 # Caminhos dos diretórios de treino e teste
+ROOT_DIR: "imagens/swedish"
 TRAIN_DIR: "imagens/swedish/train"
 TEST_DIR: "imagens/swedish/test"
 PROJECT: "swedish_convnext_s_224"
