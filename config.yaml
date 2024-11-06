@@ -1,6 +1,8 @@
 # Caminhos dos diretórios de treino e teste
-ROOT_DIR: "imagens/swedish"
+ROOT_DIR: "imagens_csv/swedish"
 TRAIN_DIR: "imagens/swedish/train"
+TRAIN_CSV_DIR: "imagens_csv/swedish/train"
+TEST_CSV_DIR: "imagens_csv/swedish/test"  # Corrigido aqui
 TEST_DIR: "imagens/swedish/test"
 PROJECT: "swedish_convnext_s_224"
 

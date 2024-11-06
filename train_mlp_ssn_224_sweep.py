@@ -4,7 +4,7 @@ import numpy as np
 from pytorch_lightning.callbacks import TQDMProgressBar, EarlyStopping
 
 from model import CustomModel
-from dataset import CSVDataLoader, CSVDataModule
+from dataset import CustomCSVModule, CustomImageModule
 import config as config
 from callbacks import ImagesPerSecondCallback
 
@@ -38,23 +38,25 @@ def train_model(config=None):
         config_sweep = wandb.config  # Acessar os parâmetros variáveis do sweep
 
         # Definir o data module com o diretório raiz e parâmetros do sweep
-        data_module = CSVDataModule(
-            train_dir=hyperparams['TRAIN_DIR'],  # Diretório de treino
-            test_dir=hyperparams['TEST_DIR'],    # Diretório de teste
+        data_module = CustomCSVModule(
+            train_dir=hyperparams['TRAIN_CSV_DIR'],  # Diretório de treino
+            test_dir=hyperparams['TEST_CSV_DIR'],    # Diretório de teste
             batch_size=config_sweep.batch_size,  # Batch size variável do sweep
             num_workers=hyperparams['NUM_WORKERS']  # Fixo
         )
 
         # Configurar o modelo com os parâmetros fixos e os variáveis do sweep
         model = CustomModel(
-            tmodel="mlp_ssn",
+            input_dim=1296,
             epochs=hyperparams['MAX_EPOCHS'],               # Fixo
             learning_rate=config_sweep.learning_rate,       # Variável do sweep
             scale_factor=hyperparams['SCALE_FACTOR'],       # Fixo
             drop_path_rate=hyperparams['DROP_PATH_RATE'],   # Fixo
             num_classes=hyperparams['NUM_CLASSES'],         # Fixo
             label_smoothing=hyperparams['LABEL_SMOOTHING'],
-            optimizer_momentum=hyperparams['OPTIMIZER_MOMENTUM']  # Fixo
+            optimizer_momentum=hyperparams['OPTIMIZER_MOMENTUM'],
+            hidden_layers=5,
+            hidden_units=1296
         )  
 
         # Configurar o logger do W&B
