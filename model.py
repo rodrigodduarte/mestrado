@@ -2,7 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, LambdaLR, SequentialLR
 
 import torchvision
 from torchvision import models
@@ -206,9 +206,10 @@ class CustomModel(pl.LightningModule):
         }
     
 
-class CustomModel(pl.LightningModule):
+class CustomMLPModel(pl.LightningModule):
     def __init__(self, input_dim, epochs, learning_rate, scale_factor, drop_path_rate,
-                 num_classes, label_smoothing, optimizer_momentum, hidden_layers=3, hidden_units=128):
+                 num_classes, label_smoothing, optimizer_momentum, hidden_layers=3, hidden_units=128,
+                 warmup_steps = 10, weight_decay = 0.005):
         """
         Inicializa o modelo MLP para classificação usando nn.ModuleList com PyTorch Lightning.
 
@@ -227,6 +228,11 @@ class CustomModel(pl.LightningModule):
         self.num_classes = num_classes
         self.label_smoothing = label_smoothing
         self.optimizer_momentum = optimizer_momentum
+        self.hidden_layers = hidden_layers
+        self.hidden_units = hidden_units
+        self.warmup_steps = warmup_steps
+        self.weight_decay = weight_decay
+
         self.fn_loss = nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)
         
         # Métricas
@@ -243,9 +249,14 @@ class CustomModel(pl.LightningModule):
         
         # Adicionando as camadas ocultas
         for _ in range(hidden_layers):
-            layers.append(nn.Linear(in_features, hidden_units))
-            layers.append(nn.ReLU())  # Ativação ReLU
-            layers.append(nn.Dropout(0.2))  # Dropout para evitar overfitting
+            layers.append(nn.Linear(in_features, 4*hidden_units, bias=True)),
+            layers.append(nn.LayerNorm(4*hidden_units, eps=1e-06, elementwise_affine=True)),
+            layers.append(nn.GELU(approximate='none')),  # Ativação GELU
+            layers.append(nn.Dropout(0.1))  # Dropout para evitar overfitting
+            layers.append(nn.Linear(4*hidden_units, hidden_units, bias=True))
+            layers.append(nn.LayerNorm(hidden_units, eps=1e-06, elementwise_affine=True)),
+            layers.append(nn.GELU(approximate='none')),  # Ativação GELU
+            layers.append(nn.Dropout(0.1))  # Dropout para evitar overfitting
             in_features = hidden_units
         
         # Camada final de classificação
@@ -310,6 +321,130 @@ class CustomModel(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         images, labels = batch
         logits = self.forward(images)
+        loss = self.fn_loss(logits, labels)
+        preds = torch.argmax(logits, 1)
+
+        # Calcular a precisão
+        self.test_accuracy(preds, labels)   
+        self.log("test/loss_epoch", loss, on_step=False, on_epoch=True)
+        self.log("test/acc_epoch", self.test_accuracy, on_step=False, on_epoch=True)
+
+    def configure_optimizers(self):
+        # Definir o otimizador
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate, weight_decay= self.weight_decay)
+
+        # Função para o warm-up
+        def lr_lambda(current_step):
+            if current_step < self.warmup_steps:
+                return float(current_step) / float(max(1, self.warmup_steps))
+            return 1.0
+
+        # Warm-up scheduler com LambdaLR
+        warmup_scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
+
+        # Cosine annealing scheduler após o warm-up
+        cosine_scheduler = CosineAnnealingLR(optimizer, T_max=self.epochs - self.warmup_steps)
+
+        # Combinação dos schedulers usando SequentialLR
+        scheduler = torch.optim.lr_scheduler.SequentialLR(
+            optimizer,
+            schedulers=[warmup_scheduler, cosine_scheduler],
+            milestones=[self.warmup_steps]
+        )
+
+        # Retornar o otimizador e o scheduler
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': {
+                'scheduler': scheduler,
+                'interval': 'step',  # Step the scheduler per batch
+                'frequency': 1  # Aplica o scheduler a cada batch
+            }
+        }
+    
+class CustomImageCSVModel(pl.LightningModule):
+    def __init__(self, features_dim, epochs, learning_rate, scale_factor,
+                 drop_path_rate, num_classes, label_smoothing, optimizer_momentum, hidden_dim_mlp):
+        
+        super(CustomImageCSVModel, self).__init__()
+
+        self.features_dim = features_dim
+        self.epochs = epochs
+        self.learning_rate = learning_rate
+        self.scale_factor = scale_factor
+        self.drop_path_rate = drop_path_rate
+        self.num_classes = num_classes
+        self.label_smoothing = label_smoothing
+        self.optimizer_momentum = optimizer_momentum
+        self.fn_loss = nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)
+        self.hidden_dim_mlp = hidden_dim_mlp
+        
+        # Métricas
+        self.train_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
+        self.val_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
+        self.test_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
+
+        # Backbone ConvNeXt
+        self.model = models.convnext_tiny(weights=models.ConvNeXt_Tiny_Weights.DEFAULT, 
+                                          drop_path_rate=self.drop_path_rate)
+        self.backbone = nn.Sequential(*list(self.model.children())[:-1])  # Remove a última camada (classificador)
+        
+        self.mlp = nn.Sequential(
+            nn.Linear(768 + self.features_dim, 2048),  # Concatenando 768 (do ConvNeXt) com o vetor extra
+            nn.LayerNorm(2048),
+            nn.GELU(),
+            nn.Dropout(0.2),
+            nn.Linear(2048, num_classes)
+        )
+        
+    def forward(self, x, features):
+        # Extrair as características do ConvNeXt
+        model_features = self.backbone(x).flatten(1)  # Flatten as saídas do ConvNeXt (não inclui o batch size)
+        
+        # Concatenar o vetor extra de características
+        features = torch.cat((model_features, features), dim=1)  # Concatenar ao longo da dimensão das características
+        print(features.shape)
+        # Passar pelas camadas finais (MLP)
+        out = self.mlp(features)
+        return out
+
+    def training_step(self, batch, batch_idx):
+        images, features, labels = batch
+        logits = self.forward(images, features)
+        loss = self.fn_loss(logits, labels)
+        preds = torch.argmax(logits, 1)
+
+        # Calcular a precisão
+        self.train_accuracy(preds, labels)
+        
+        # Logar a perda e a acurácia
+        self.log('train_loss', loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log('train_accuracy', self.train_accuracy, prog_bar=True, on_step=False, on_epoch=True)
+        
+        # Retornar a perda para o processamento posterior
+        return {'loss': loss}
+    
+
+    def validation_step(self, batch, batch_idx):
+        images, features, labels = batch
+        logits = self.forward(images, features)
+        loss = self.fn_loss(logits, labels)
+        preds = torch.argmax(logits, 1)
+        
+        # Calcular a precisão para validação
+        self.val_accuracy(preds, labels)
+        
+        # Logar a perda e a acurácia no conjunto de validação
+        self.log('val_loss', loss, prog_bar=True, on_epoch=True)
+        self.log('val_accuracy', self.val_accuracy, prog_bar=True, on_epoch=True)
+        
+        # Retornar a perda e a acurácia
+        return {'val_loss': loss}
+    
+
+    def test_step(self, batch, batch_idx):
+        images, features, labels = batch
+        logits = self.forward(images, features)
         loss = self.fn_loss(logits, labels)
         preds = torch.argmax(logits, 1)
 

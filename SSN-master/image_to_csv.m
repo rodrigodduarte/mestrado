@@ -1,7 +1,7 @@
 % Diretório de entrada
 inputDir = '/home/rodrigo/Documentos/mestrado/GitHub/imagens/swedish/';
 % Diretório de saída
-outputDir = '/home/rodrigo/Documentos/mestrado/GitHub/imagens_csv/swedish/';
+outputDir = '/home/rodrigo/Documentos/mestrado/GitHub/imagens/swedish/';
 
 % Criar o diretório de saída se não existir
 if ~exist(outputDir, 'dir')
@@ -35,15 +35,15 @@ for i = 1:length(subDirs)
             imagePath = fullfile(classDir, imageFiles(k).name);
             image = imread(imagePath);
             
-            % Redimensiona a imagem
-            image = imresize(image, [224, 224]);
+            % % Redimensiona a imag em
+            image = imresize(image, [384, 384]);
             
             % Aplica a função SSN
-            features = SSN(image, 12); % Altere o segundo parâmetro conforme necessário
+            features = SSN(image, 6); % Altere o segundo parâmetro conforme necessário
             
             % Salva as features em um arquivo CSV com o sufixo '_csv'
             [~, name, ~] = fileparts(imageFiles(k).name);
-            outputFilePath = fullfile(outputClassDir, [name, '_csv.csv']);
+            outputFilePath = fullfile(outputClassDir, [name, '.csv']);
             
             % Escreve as características em um arquivo CSV
             writematrix(features, outputFilePath);

@@ -3,8 +3,8 @@ import pytorch_lightning as pl
 import numpy as np
 from pytorch_lightning.callbacks import TQDMProgressBar, EarlyStopping
 
-from model import CustomModel
-from dataset import CustomCSVModule, CustomImageModule
+from model import CustomModel, CustomImageCSVModel
+from dataset import CustomCSVModule, CustomImageModule, CustomImageCSVModule
 import config as config
 from callbacks import ImagesPerSecondCallback
 
@@ -31,23 +31,24 @@ def set_random_seeds():
 
 
 def train_model(config=None):
-    hyperparams = load_hyperparameters('config_mlp.yaml')
+    hyperparams = load_hyperparameters('config.yaml')
 
     # Inicializar o wandb e acessar os parâmetros variáveis (do sweep)
-    with wandb.init(project="swedish_mlp_ssn_224", config=config):
+    with wandb.init(project="swedish_mlp_ssn_384", config=config):
         config_sweep = wandb.config  # Acessar os parâmetros variáveis do sweep
 
         # Definir o data module com o diretório raiz e parâmetros do sweep
-        data_module = CustomCSVModule(
-            train_dir=hyperparams['TRAIN_CSV_DIR'],  # Diretório de treino
-            test_dir=hyperparams['TEST_CSV_DIR'],    # Diretório de teste
+        data_module = CustomImageCSVModule(
+            train_dir=hyperparams['TRAIN_DIR'],  # Diretório de treino
+            test_dir=hyperparams['TEST_DIR'],
+            shape=hyperparams['SHAPE'],        # Diretório de teste
             batch_size=config_sweep.batch_size,  # Batch size variável do sweep
             num_workers=hyperparams['NUM_WORKERS']  # Fixo
         )
 
         # Configurar o modelo com os parâmetros fixos e os variáveis do sweep
-        model = CustomModel(
-            input_dim=hyperparams["INPUT_NETWORK"],
+        model = CustomImageCSVModel(
+            features_dim=hyperparams["FEATURES_DIM"],
             epochs=hyperparams['MAX_EPOCHS'],               # Fixo
             learning_rate=config_sweep.learning_rate,       # Variável do sweep
             scale_factor=hyperparams['SCALE_FACTOR'],       # Fixo
@@ -55,12 +56,11 @@ def train_model(config=None):
             num_classes=hyperparams['NUM_CLASSES'],         # Fixo
             label_smoothing=hyperparams['LABEL_SMOOTHING'],
             optimizer_momentum=hyperparams['OPTIMIZER_MOMENTUM'],
-            hidden_layers=hyperparams["HIDDEN_LAYERS"],
-            hidden_units=hyperparams["HIDDEN_UNITS"]
-        )  
+            hidden_dim_mlp=config_sweep.hidden_dim_mlp
+        )
 
         # Configurar o logger do W&B
-        wandb_logger = WandbLogger(project="swedish_mlp_ssn_224")
+        wandb_logger = WandbLogger(project="swedish_mlp_ssn_384")
 
         # Configurar o callback de Early Stopping
         early_stopping = EarlyStopping(
@@ -110,19 +110,22 @@ if __name__ == "__main__":
         },
         'parameters': {
             'batch_size': {
-                'values': [64]  # valores de batch size a serem testados
+                'values': [32]  # valores de batch size a serem testados
             },
             'learning_rate': {
-                'min': 3e-3,           # valor mínimo da learning rate
-                'max': 4e-3            # valor máximo da learning rate
+                'min': 9e-5,           # valor mínimo da learning rate
+                'max': 1e-3           # valor máximo da learning rate
+            },
+            'hidden_dim_mlp':{
+                'values': [512, 1024, 2048]
             }
         }
     }
 
     # Criar o sweep no W&B
-    sweep_id = wandb.sweep(sweep_config, project="swedish_mlp_ssn_224")
+    sweep_id = wandb.sweep(sweep_config, project="swedish_mlp_ssn_384")
 
     # Executar o sweep
-    wandb.agent(sweep_id, function=train_model, count=1)
+    wandb.agent(sweep_id, function=train_model, count=200)
 
     wandb.finish()

@@ -1,16 +1,16 @@
 # Caminhos dos diretórios de treino e teste
 ROOT_DIR: "imagens_csv/swedish"
 TRAIN_DIR: "imagens/swedish/train"
+TRAIN_CSV_DIR: "imagens_csv/swedish/train"
+TEST_CSV_DIR: "imagens_csv/swedish/test"  # Corrigido aqui
 TEST_DIR: "imagens/swedish/test"
-CSV_TRAIN_DIR: "imagens_csv/swedish/train"
-CSV_TEST_DIR: "imagens_csv/swedish/test"  # Corrigido aqui
 PROJECT: "swedish_convnext_s_224"
 
 # Hiperparâmetros relacionados à configuração do modelo
-SHAPE: [384, 384]
-FEATURES_DIM: 648
+SHAPE: [224, 224]
+INPUT_NETWORK: 432
 HIDDEN_LAYERS: 2
-HIDDEN_UNITS: 1296
+HIDDEN_UNITS: 864
 MAX_EPOCHS: 1000
 NUM_CLASSES: 15
 BATCH_SIZE: 8  # Valor padrão (será sobrescrito pelo sweep)

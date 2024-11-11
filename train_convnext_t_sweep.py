@@ -8,7 +8,7 @@ from pytorch_lightning.profilers import PyTorchProfiler
 from model import CustomModel
 from dataset import CustomImageModule
 import config as config
-from callbacks import CustomEarlyStopping, ImagesPerSecondCallback
+from callbacks import  ImagesPerSecondCallback
 
 import wandb
 from pytorch_lightning.loggers import WandbLogger
@@ -33,7 +33,7 @@ def set_random_seeds():
 
 
 def train_model(config=None):
-    hyperparams = load_hyperparameters('config2.yaml')
+    hyperparams = load_hyperparameters('config.yaml')
 
     # Inicializar o wandb e acessar os parâmetros variáveis (do sweep)
     with wandb.init(project="swedish_convnext_t_224", config=config):

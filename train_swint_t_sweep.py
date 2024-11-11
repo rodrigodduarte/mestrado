@@ -33,7 +33,7 @@ def set_random_seeds():
 
 
 def train_model(config=None):
-    hyperparams = load_hyperparameters('config2.yaml')
+    hyperparams = load_hyperparameters('config.yaml')
 
     # Inicializar o wandb e acessar os parâmetros variáveis (do sweep)
     with wandb.init(project="swedish_swint_t_224", config=config):
@@ -124,6 +124,6 @@ if __name__ == "__main__":
     sweep_id = wandb.sweep(sweep_config, project="swedish_swint_t_224")
 
     # Executar o sweep
-    wandb.agent(sweep_id, function=train_model, count=25)  # Executa o sweep com 10 variações
+    wandb.agent(sweep_id, function=train_model, count=1)  # Executa o sweep com 10 variações
 
     wandb.finish()
