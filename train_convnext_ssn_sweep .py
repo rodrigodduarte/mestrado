@@ -1,7 +1,7 @@
 import torch
 import pytorch_lightning as pl
 import numpy as np
-from pytorch_lightning.callbacks import TQDMProgressBar, EarlyStopping
+from pytorch_lightning.callbacks import TQDMProgressBar, EarlyStopping, ModelCheckpoint
 
 from model import CustomModel, CustomImageCSVModel
 from dataset import CustomCSVModule, CustomImageModule, CustomImageCSVModule

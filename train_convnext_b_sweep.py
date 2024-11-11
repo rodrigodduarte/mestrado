@@ -71,6 +71,15 @@ def train_model(config=None):
             mode='max'               # 'max' para acurácia (procurando maximizar)
         )
 
+        checkpoint_callback = ModelCheckpoint(
+            monitor="val_loss",       # métrica a ser monitorada
+            mode="min",               # "min" para menor val_loss
+            filename="best-checkpoint-{epoch:02d}-{val_loss:.2f}",  # nome do arquivo do checkpoint
+            save_top_k=1,             # salva apenas o melhor modelo
+            dirpath="checkpoints/"    # diretório para salvar o checkpoint
+        )
+
+
         # Configurar o Trainer do PyTorch Lightning
         trainer = pl.Trainer(
             logger=wandb_logger,    # W&B integration
@@ -82,7 +91,8 @@ def train_model(config=None):
             callbacks=[
                 TQDMProgressBar(leave=True),
                 early_stopping,
-                ImagesPerSecondCallback()]
+                ImagesPerSecondCallback(),
+                checkpoint_callback]
         )
 
         # Treinando o modelo
@@ -111,11 +121,11 @@ if __name__ == "__main__":
         },
         'parameters': {
             'batch_size': {
-                'values': [8, 16]  # valores de batch size a serem testados
+                'values': [16]  # valores de batch size a serem testados
             },
             'learning_rate': {
-                'min': 1e-5,           # valor mínimo da learning rate
-                'max': 1e-4            # valor máximo da learning rate
+                'min': 6e-5,           # valor mínimo da learning rate
+                'max': 7e-4            # valor máximo da learning rate
             }
         }
     }
@@ -124,6 +134,6 @@ if __name__ == "__main__":
     sweep_id = wandb.sweep(sweep_config, project="swedish_convnext_b_224")
 
     # Executar o sweep
-    wandb.agent(sweep_id, function=train_model, count=25)  # Executa o sweep com 10 variações
+    wandb.agent(sweep_id, function=train_model, count=3)  # Executa o sweep com 10 variações
 
     wandb.finish()
