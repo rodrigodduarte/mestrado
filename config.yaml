@@ -5,6 +5,7 @@ TEST_DIR: "imagens/swedish/test"
 CSV_TRAIN_DIR: "imagens_csv/swedish/train"
 CSV_TEST_DIR: "imagens_csv/swedish/test"  # Corrigido aqui
 PROJECT: "swedish_convnext_s_224"
+CHECKPOINT_PATH: "checkpoints/best-checkpoint-epoch=49-val_loss=0.56.ckpt"
 
 # Hiperparâmetros relacionados à configuração do modelo
 SHAPE: [384, 384]

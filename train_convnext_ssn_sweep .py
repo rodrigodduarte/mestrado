@@ -3,9 +3,9 @@ import pytorch_lightning as pl
 import numpy as np
 from pytorch_lightning.callbacks import TQDMProgressBar, EarlyStopping, ModelCheckpoint
 
-from model import CustomModel, CustomImageCSVModel
-from dataset import CustomCSVModule, CustomImageModule, CustomImageCSVModule
-import config as config
+from model import CustomEnsembleModel
+from dataset import CustomImageCSVModule
+
 from callbacks import ImagesPerSecondCallback
 
 import wandb
@@ -31,7 +31,7 @@ def set_random_seeds():
 
 
 def train_model(config=None):
-    hyperparams = load_hyperparameters('config.yaml')
+    hyperparams = load_hyperparameters('config_mlp.yaml')
 
     # Inicializar o wandb e acessar os parâmetros variáveis (do sweep)
     with wandb.init(project="swedish_mlp_ssn_384", config=config):
@@ -47,17 +47,19 @@ def train_model(config=None):
         )
 
         # Configurar o modelo com os parâmetros fixos e os variáveis do sweep
-        model = CustomImageCSVModel(
+        model =CustomEnsembleModel(   
+            epochs=hyperparams['MAX_EPOCHS'],               
+            learning_rate=config_sweep.learning_rate,
             features_dim=hyperparams["FEATURES_DIM"],
-            epochs=hyperparams['MAX_EPOCHS'],               # Fixo
-            learning_rate=config_sweep.learning_rate,       # Variável do sweep
-            scale_factor=hyperparams['SCALE_FACTOR'],       # Fixo
-            drop_path_rate=hyperparams['DROP_PATH_RATE'],   # Fixo
-            num_classes=hyperparams['NUM_CLASSES'],         # Fixo
+            scale_factor = hyperparams['SCALE_FACTOR'],    
+            drop_path_rate=hyperparams['DROP_PATH_RATE'],   
+            num_classes=hyperparams['NUM_CLASSES'],         
             label_smoothing=hyperparams['LABEL_SMOOTHING'],
             optimizer_momentum=hyperparams['OPTIMIZER_MOMENTUM'],
-            hidden_dim_mlp=config_sweep.hidden_dim_mlp
+            layer_scale = config_sweep.layer_scale
         )
+
+        
 
         # Configurar o logger do W&B
         wandb_logger = WandbLogger(project="swedish_mlp_ssn_384")
@@ -65,7 +67,7 @@ def train_model(config=None):
         # Configurar o callback de Early Stopping
         early_stopping = EarlyStopping(
             monitor='val_loss',  # Monitorar a acurácia de validação
-            patience=5,              # Número de épocas para esperar antes de parar
+            patience=15,              # Número de épocas para esperar antes de parar
             verbose=True,            # Exibir mensagens sobre o que está acontecendo
             mode='min'               # 'min' para minimizar a perda de validação
         )
@@ -116,8 +118,8 @@ if __name__ == "__main__":
                 'min': 9e-5,           # valor mínimo da learning rate
                 'max': 1e-3           # valor máximo da learning rate
             },
-            'hidden_dim_mlp':{
-                'values': [512, 1024, 2048]
+            'layer_scale':{
+                'values': [0.67, 1, 1.33]
             }
         }
     }
