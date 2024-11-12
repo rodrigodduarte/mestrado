@@ -2,13 +2,13 @@ import torch
 import pytorch_lightning as pl
 import numpy as np
 
-from pytorch_lightning.callbacks import TQDMProgressBar, EarlyStopping, ModelCheckpoint, LearningRateMonitor
+from pytorch_lightning.callbacks import TQDMProgressBar, EarlyStopping, ModelCheckpoint
 from pytorch_lightning.profilers import PyTorchProfiler
 
 from model import CustomModel
 from dataset import CustomImageModule
 import config as config
-from callbacks import  ImagesPerSecondCallback
+from callbacks import CustomEarlyStopping, ImagesPerSecondCallback
 
 import wandb
 from pytorch_lightning.loggers import WandbLogger
@@ -36,7 +36,7 @@ def train_model(config=None):
     hyperparams = load_hyperparameters('config.yaml')
 
     # Inicializar o wandb e acessar os parâmetros variáveis (do sweep)
-    with wandb.init(project="swedish_convnext_t_224", config=config):
+    with wandb.init(project="swedish_convnext_t_384", config=config):
         config_sweep = wandb.config  # Acessar os parâmetros variáveis do sweep
 
         # Definir o data module com os hiperparâmetros fixos e os do sweep
@@ -61,7 +61,7 @@ def train_model(config=None):
         )  
 
         # Configurar o logger do W&B
-        wandb_logger = WandbLogger(project="swedish_convnext_t_224")
+        wandb_logger = WandbLogger(project="swedish_convnext_t_384")
 
         # Configurar o callback de Early Stopping
         early_stopping = EarlyStopping(
@@ -69,6 +69,14 @@ def train_model(config=None):
             patience=15,              # Número de épocas para esperar antes de parar
             verbose=True,            # Exibir mensagens sobre o que está acontecendo
             mode='min'               # 'max' para acurácia (procurando maximizar)
+        )
+
+        checkpoint_callback = ModelCheckpoint(
+            monitor="val_loss",       # métrica a ser monitorada
+            mode="min",               # "min" para menor val_loss
+            filename="best-checkpoint-{epoch:02d}-{val_loss:.2f}",  # nome do arquivo do checkpoint
+            save_top_k=1,             # salva apenas o melhor modelo
+            dirpath="checkpoints/"    # diretório para salvar o checkpoint
         )
 
 
@@ -83,7 +91,8 @@ def train_model(config=None):
             callbacks=[
                 TQDMProgressBar(leave=True),
                 early_stopping,
-                ImagesPerSecondCallback()]
+                ImagesPerSecondCallback(),
+                checkpoint_callback]
         )
 
         # Treinando o modelo
@@ -92,7 +101,8 @@ def train_model(config=None):
         # Testando o modelo
         trainer.test(model, data_module)
 
-        # Finalizando
+
+
         wandb.finish()
 
 if __name__ == "__main__":
@@ -106,24 +116,24 @@ if __name__ == "__main__":
     sweep_config = {
         'method': 'random',  # método de busca aleatória
         'metric': {
-            'name': 'val_accuracy',
-            'goal': 'maximize'  # otimizar a acurácia de validação
+            'name': 'val_loss',
+            'goal': 'minimize'  # otimizar a acurácia de validação
         },
         'parameters': {
             'batch_size': {
-                'values': [16, 32]  # valores de batch size a serem testados
+                'values': [32]  # valores de batch size a serem testados
             },
             'learning_rate': {
-                'min': 1e-5,           # valor mínimo da learning rate
-                'max': 1e-4            # valor máximo da learning rate
+                'min': 6e-5,           # valor mínimo da learning rate
+                'max': 7e-5            # valor máximo da learning rate
             }
         }
     }
 
     # Criar o sweep no W&B
-    sweep_id = wandb.sweep(sweep_config, project="swedish_convnext_t_224")
+    sweep_id = wandb.sweep(sweep_config, project="swedish_convnext_t_384")
 
     # Executar o sweep
-    wandb.agent(sweep_id, function=train_model, count=25)  # Executa o sweep com 10 variações
+    wandb.agent(sweep_id, function=train_model, count=3)  # Executa o sweep com 10 variações
 
     wandb.finish()

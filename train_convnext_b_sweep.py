@@ -36,7 +36,7 @@ def train_model(config=None):
     hyperparams = load_hyperparameters('config.yaml')
 
     # Inicializar o wandb e acessar os parâmetros variáveis (do sweep)
-    with wandb.init(project="swedish_convnext_b_224", config=config):
+    with wandb.init(project="swedish_convnext_b_384", config=config):
         config_sweep = wandb.config  # Acessar os parâmetros variáveis do sweep
 
         # Definir o data module com os hiperparâmetros fixos e os do sweep
@@ -61,12 +61,12 @@ def train_model(config=None):
         )  
 
         # Configurar o logger do W&B
-        wandb_logger = WandbLogger(project="swedish_convnext_b_224")
+        wandb_logger = WandbLogger(project="swedish_convnext_b_384")
 
         # Configurar o callback de Early Stopping
         early_stopping = EarlyStopping(
             monitor='val_accuracy',  # Monitorar a acurácia de validação
-            patience=15,              # Número de épocas para esperar antes de parar
+            patience=30,              # Número de épocas para esperar antes de parar
             verbose=True,            # Exibir mensagens sobre o que está acontecendo
             mode='max'               # 'max' para acurácia (procurando maximizar)
         )
@@ -125,13 +125,13 @@ if __name__ == "__main__":
             },
             'learning_rate': {
                 'min': 6e-5,           # valor mínimo da learning rate
-                'max': 7e-4            # valor máximo da learning rate
+                'max': 7e-5            # valor máximo da learning rate
             }
         }
     }
 
     # Criar o sweep no W&B
-    sweep_id = wandb.sweep(sweep_config, project="swedish_convnext_b_224")
+    sweep_id = wandb.sweep(sweep_config, project="swedish_convnext_b_384")
 
     # Executar o sweep
     wandb.agent(sweep_id, function=train_model, count=3)  # Executa o sweep com 10 variações
