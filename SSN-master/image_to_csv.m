@@ -1,12 +1,12 @@
 % Diretório de entrada
-inputDir = '/home/rodrigo/Documentos/mestrado/GitHub/imagens/swedish/';
+inputDir = '/home/rodrigoduarte/Documentos/projeto/imagens/swedish';
 % Diretório de saída
-outputDir = '/home/rodrigo/Documentos/mestrado/GitHub/imagens/swedish/';
+outputDir = '/home/rodrigoduarte/Documentos/projeto/imagens/swedish';
 
-% Criar o diretório de saída se não existir
-if ~exist(outputDir, 'dir')
-    mkdir(outputDir);
-end
+% % Criar o diretório de saída se não existir
+% if ~exist(outputDir, 'dir')
+%     mkdir(outputDir);
+% end
 
 % Listar os diretórios de treino e teste
 subDirs = {'train', 'test'};
