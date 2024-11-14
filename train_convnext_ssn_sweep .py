@@ -6,7 +6,7 @@ from pytorch_lightning.callbacks import TQDMProgressBar, EarlyStopping, ModelChe
 from model import CustomEnsembleModel
 from dataset import CustomImageCSVModule
 
-from callbacks import ImagesPerSecondCallback
+from callbacks import ImagesPerSecondCallback, EarlyStoppingAtSpecificEpoch
 
 import wandb
 from pytorch_lightning.loggers import WandbLogger
@@ -72,6 +72,12 @@ def train_model(config=None):
             mode='min'               # 'min' para minimizar a perda de validação
         )
 
+        # Defina o limiar e a paciência
+        threshold = 0.8  
+
+        # Inicialize o callback
+        early_stopping_threshold_callback = EarlyStoppingAtSpecificEpoch(stop_epoch=5, threshold=threshold)
+
         # Configurar o Trainer do PyTorch Lightning
         trainer = pl.Trainer(
             logger=wandb_logger,    # W&B integration
@@ -83,7 +89,8 @@ def train_model(config=None):
             callbacks=[
                 TQDMProgressBar(leave=True),
                 early_stopping,
-                ImagesPerSecondCallback()
+                ImagesPerSecondCallback(),
+                early_stopping_threshold_callback
             ]
         )
 
@@ -115,11 +122,11 @@ if __name__ == "__main__":
                 'values': [32]  # valores de batch size a serem testados
             },
             'learning_rate': {
-                'min': 9e-5,           # valor mínimo da learning rate
-                'max': 1e-3           # valor máximo da learning rate
+                'min': 5e-5,           # valor mínimo da learning rate
+                'max': 5e-4           # valor máximo da learning rate
             },
             'layer_scale':{
-                'values': [0.67, 1, 1.33]
+                'values': [0.7, 0.85, 1]
             }
         }
     }

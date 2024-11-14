@@ -32,3 +32,33 @@ class ImagesPerSecondCallback(pl.Callback):
 
         # Loga a métrica diretamente no W&B
         wandb.log({"images_per_second": images_per_second, "epoch": trainer.current_epoch})
+
+import pytorch_lightning as pl
+
+class EarlyStoppingAtSpecificEpoch(pl.Callback):
+    def __init__(self, stop_epoch: int, threshold: float):
+        """
+        Callback para interromper o treinamento se o val_loss for maior que o limiar
+        em uma época específica.
+
+        Args:
+            stop_epoch (int): A época específica em que o `val_loss` será verificado.
+            threshold (float): Valor limiar para o val_loss.
+        """
+        super().__init__()
+        self.stop_epoch = stop_epoch
+        self.threshold = threshold
+
+    def on_validation_epoch_end(self, trainer, pl_module):
+        # Obtém o valor do val_loss
+        val_loss = trainer.callback_metrics.get("val_loss")
+
+        # Verifica se o val_loss foi registrado e se estamos na época correta
+        if val_loss is None:
+            return
+
+        # Interrompe o treinamento apenas se estivermos na época específica
+        if trainer.current_epoch == self.stop_epoch:
+            if val_loss > self.threshold:
+                print(f"Early stopping: val_loss {val_loss:.4f} maior que {self.threshold} na época {self.stop_epoch}.")
+                trainer.should_stop = True

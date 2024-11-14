@@ -214,7 +214,9 @@ class CustomEnsembleModel(pl.LightningModule):
         
         super(CustomEnsembleModel, self).__init__()
 
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore=["method", "metric.goal", "metric.name","parameters.batch_size",
+                                          "parameters.layer_scale", "parameters.learning_rate.distribution",
+                                          "parameters.learning_rate.max", "parameters.learning_rate.min"])
 
         self.epochs = epochs
         self.learning_rate = learning_rate
@@ -244,7 +246,8 @@ class CustomEnsembleModel(pl.LightningModule):
         self.mlp_vector_model = nn.Sequential(
             nn.Linear(features_dim, features_dim),
             nn.GELU(approximate='none'),
-            nn.LayerNorm(features_dim)
+            nn.LayerNorm(features_dim),
+            nn.Dropout(p=0.3)
         )
 
         # Modelo de combinação
@@ -252,6 +255,7 @@ class CustomEnsembleModel(pl.LightningModule):
             nn.Linear(features_dim + 768, int((features_dim + 768) * self.layer_scale)),
             nn.GELU(approximate='none'),
             nn.LayerNorm(int((features_dim + 768) * self.layer_scale)),
+            nn.Dropout(p=0.3),
             nn.Linear(int((features_dim + 768) * self.layer_scale), self.num_classes)
         )
         
