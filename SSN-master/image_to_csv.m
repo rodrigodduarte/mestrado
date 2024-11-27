@@ -1,7 +1,7 @@
 % Diretório de entrada
-inputDir = '/home/rodrigoduarte/Documentos/projeto/imagens/swedish';
+inputDir = '/home/rodrigoduarte/Documentos/projeto/imagens/flavia';
 % Diretório de saída
-outputDir = '/home/rodrigoduarte/Documentos/projeto/imagens/swedish';
+outputDir = '/home/rodrigoduarte/Documentos/projeto/imagens/flavia';
 
 % % Criar o diretório de saída se não existir
 % if ~exist(outputDir, 'dir')

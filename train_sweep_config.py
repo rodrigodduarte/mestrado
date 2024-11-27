@@ -8,7 +8,7 @@ from pytorch_lightning.profilers import PyTorchProfiler
 from model import CustomModel
 from dataset import CustomImageModule
 import config as config
-from callbacks import CustomEarlyStopping, ImagesPerSecondCallback
+from callbacks import EarlyStoppingAtSpecificEpoch, ImagesPerSecondCallback, StopOnPerfectTestAccuracyCallback
 
 import wandb
 from pytorch_lightning.loggers import WandbLogger
@@ -38,6 +38,7 @@ def train_model(config=None):
     # Inicializar o wandb e acessar os parâmetros variáveis (do sweep)
     with wandb.init(project=hyperparams["PROJECT"], config=config):
         config_sweep = wandb.config  # Acessar os parâmetros variáveis do sweep
+        # Checar condição global antes de começar o treinamento
 
         # Definir o data module com os hiperparâmetros fixos e os do sweep
         data_module = CustomImageModule(
@@ -52,6 +53,7 @@ def train_model(config=None):
         model = CustomModel(
             tmodel=hyperparams["TMODEL"],
             name_dataset= hyperparams["NAME_DATASET"],
+            shape = hyperparams["SHAPE"],
             epochs=hyperparams['MAX_EPOCHS'],               # Fixo
             learning_rate=config_sweep.learning_rate,       # Variável do sweep
             scale_factor=hyperparams['SCALE_FACTOR'],       # Fixo
@@ -64,23 +66,13 @@ def train_model(config=None):
         # Configurar o logger do W&B
         wandb_logger = WandbLogger(project=hyperparams["PROJECT"])
 
-        # Configurar o callback de Early Stopping
-        early_stopping = EarlyStopping(
-            monitor='val_loss',  # Monitorar a acurácia de validação
-            patience=15,              # Número de épocas para esperar antes de parar
-            verbose=True,            # Exibir mensagens sobre o que está acontecendo
-            mode='min'               # 'max' para acurácia (procurando maximizar)
-        )
 
-        checkpoint_callback = ModelCheckpoint(
-            monitor="val_loss",       # métrica a ser monitorada
-            mode="min",               # "min" para menor val_loss
-            filename="best-checkpoint-{epoch:02d}-{val_loss:.2f}",  # nome do arquivo do checkpoint
-            save_top_k=1,             # salva apenas o melhor modelo
-            dirpath="checkpoints/"    # diretório para salvar o checkpoint
-        )
-
-
+        # Defina o limiar e a paciência
+        threshold = 0.8  
+        stop_epoch = 8
+        # Inicialize o callback
+        early_stopping_threshold_callback_10 = EarlyStoppingAtSpecificEpoch(stop_epoch=10, threshold=0.8)
+        early_stopping_threshold_callback_30 = EarlyStoppingAtSpecificEpoch(stop_epoch=35, threshold=0.67)
         # Configurar o Trainer do PyTorch Lightning
         trainer = pl.Trainer(
             logger=wandb_logger,    # W&B integration
@@ -91,9 +83,9 @@ def train_model(config=None):
             max_epochs=hyperparams['MAX_EPOCHS'],    # Fixo
             callbacks=[
                 TQDMProgressBar(leave=True),
-                early_stopping,
                 ImagesPerSecondCallback(),
-                checkpoint_callback]
+                StopOnPerfectTestAccuracyCallback()
+            ]
         )
 
         # Treinando o modelo
@@ -126,8 +118,8 @@ if __name__ == "__main__":
                 'values': [32]  # valores de batch size a serem testados
             },
             'learning_rate': {
-                'min': 7e-6,           # valor mínimo da learning rate
-                'max': 9e-5            # valor máximo da learning rate
+                'min': 9e-6,           # valor mínimo da learning rate
+                'max': 7e-5            # valor máximo da learning rate
             }
         }
     }

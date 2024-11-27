@@ -23,14 +23,17 @@ from compact_transform.src import cct_14_7x2_224, cct_14_7x2_384, cct_14_7x2_384
 
 
 class CustomModel(pl.LightningModule):
-    def __init__(self, tmodel, epochs, learning_rate, scale_factor,
+    def __init__(self, tmodel, name_dataset, epochs, shape, learning_rate, scale_factor,
                  drop_path_rate, num_classes, label_smoothing, optimizer_momentum):
         
         super(CustomModel, self).__init__()
 
         self.save_hyperparameters()
 
+        self.tmodel = tmodel
+        self.name_dataset = name_dataset
         self.epochs = epochs
+        self.shape = shape
         self.learning_rate = learning_rate
         self.scale_factor = scale_factor
         self.drop_path_rate = drop_path_rate
@@ -209,8 +212,9 @@ class CustomModel(pl.LightningModule):
       
 
 class CustomEnsembleModel(pl.LightningModule):
-    def __init__(self, epochs, learning_rate, features_dim, scale_factor,
-                 drop_path_rate, num_classes, label_smoothing, optimizer_momentum, layer_scale):
+    def __init__(self, name_dataset, shape, epochs, learning_rate, features_dim, scale_factor,
+                 drop_path_rate, num_classes, label_smoothing, optimizer_momentum,
+                 weight_decay, layer_scale):
         
         super(CustomEnsembleModel, self).__init__()
 
@@ -218,6 +222,8 @@ class CustomEnsembleModel(pl.LightningModule):
                                           "parameters.layer_scale", "parameters.learning_rate.distribution",
                                           "parameters.learning_rate.max", "parameters.learning_rate.min"])
 
+        self.name_dataset = name_dataset
+        self.shape = shape
         self.epochs = epochs
         self.learning_rate = learning_rate
         self.features_dim = features_dim
@@ -226,6 +232,7 @@ class CustomEnsembleModel(pl.LightningModule):
         self.num_classes = num_classes
         self.label_smoothing = label_smoothing
         self.optimizer_momentum = optimizer_momentum
+        self.weight_decay= weight_decay
         self.layer_scale = layer_scale
         self.fn_loss = nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)
         
@@ -243,20 +250,24 @@ class CustomEnsembleModel(pl.LightningModule):
         )
         self.dl_model.classifier = self.sequential_layers
 
+        # Modelo MLP ajustado
         self.mlp_vector_model = nn.Sequential(
-            nn.Linear(features_dim, features_dim),
+            nn.Linear(features_dim, int((2/3) * features_dim)),
             nn.GELU(approximate='none'),
-            nn.LayerNorm(features_dim),
+            nn.LayerNorm(int((2/3) * features_dim)),
             nn.Dropout(p=0.3)
         )
 
-        # Modelo de combinação
+        # Modelo de combinação ajustado
+        adjusted_dim = int((2/3) * features_dim) + 768
+        scaled_dim = int(adjusted_dim * self.layer_scale)
+
         self.ensemble_model = nn.Sequential(
-            nn.Linear(features_dim + 768, int((features_dim + 768) * self.layer_scale)),
+            nn.Linear(adjusted_dim, scaled_dim),
             nn.GELU(approximate='none'),
-            nn.LayerNorm(int((features_dim + 768) * self.layer_scale)),
+            nn.LayerNorm(scaled_dim),
             nn.Dropout(p=0.3),
-            nn.Linear(int((features_dim + 768) * self.layer_scale), self.num_classes)
+            nn.Linear(scaled_dim, self.num_classes)
         )
         
         
@@ -302,10 +313,14 @@ class CustomEnsembleModel(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         images, features, labels, logits, loss, preds = self._commom_step(batch, batch_idx)
 
-        # Calcular a precisão
-        self.test_accuracy(preds, labels)   
-        self.log("test/loss_epoch", loss, on_step=False, on_epoch=True)
-        self.log("test/acc_epoch", self.test_accuracy, on_step=False, on_epoch=True)
+        # Calcular a precisão para teste
+        self.test_accuracy(preds, labels)
+        
+        # Logar a perda e a acurácia no conjunto de teste
+        self.log('test_loss', loss, prog_bar=True, on_epoch=True)
+        self.log('test_accuracy', self.test_accuracy, prog_bar=True, on_epoch=True)
+    
+        return {'test_loss': loss}
 
     def _commom_step(self, batch, batch_idx):
         images, features, labels = batch
@@ -317,7 +332,11 @@ class CustomEnsembleModel(pl.LightningModule):
 
     def configure_optimizers(self):
         # Definir o otimizador com os grupos de parâmetros
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate, betas = self.optimizer_momentum)
+        optimizer = torch.optim.AdamW(
+            self.parameters(), 
+            lr=self.learning_rate, 
+            betas = self.optimizer_momentum,
+            weight_decay=self.weight_decay)
 
         # Definir o scheduler
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.epochs)

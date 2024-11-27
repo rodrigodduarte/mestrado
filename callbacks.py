@@ -62,3 +62,11 @@ class EarlyStoppingAtSpecificEpoch(pl.Callback):
             if val_loss > self.threshold:
                 print(f"Early stopping: val_loss {val_loss:.4f} maior que {self.threshold} na época {self.stop_epoch}.")
                 trainer.should_stop = True
+
+class StopOnPerfectTestAccuracyCallback(Callback):
+    def on_validation_epoch_end(self, trainer, pl_module):
+        # Verificar a acurácia de validação
+        val_accuracy = trainer.callback_metrics.get('val_accuracy', 0)
+        if val_accuracy == 1.0:
+            print("Acurácia de validação de 100% atingida. Parando o treinamento.")
+            trainer.should_stop = True  # Isso fará o treinamento parar

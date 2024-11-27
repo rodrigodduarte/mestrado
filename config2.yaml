@@ -1,19 +1,28 @@
 # Caminhos dos diretórios de treino e teste
-TRAIN_DIR: "imagens/swedish/train"
-TEST_DIR: "imagens/swedish/test"
-PROJECT: "swedish_convnext_s_224"
+TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/train"
+TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/test"
+CSV_TRAIN_DIR: "imagens_csv/flavia/train"
+CSV_TEST_DIR: "imagens_csv/flavia/test"  # Corrigido aqui
+PROJECT: "flavia_ensemble_224"
+CHECKPOINT_PATH: "checkpoints_config2"
+NAME_DATASET: "FLAVIA"
 
 # Hiperparâmetros relacionados à configuração do modelo
+TMODEL: "convnext_t"
 SHAPE: [224, 224]
-MAX_EPOCHS: 50
-NUM_CLASSES: 15
-BATCH_SIZE: 8  # Valor padrão (será sobrescrito pelo sweep)
-LEARNING_RATE: 5e-5  # Valor padrão (será sobrescrito pelo sweep)
-WEIGHT_DECAY: 1e-8
+FEATURES_DIM: 648
+HIDDEN_LAYERS: 2
+HIDDEN_UNITS: 1296
+MAX_EPOCHS: 100
+NUM_CLASSES: 32
+BATCH_SIZE: 32  # Valor padrão (será sobrescrito pelo sweep)
+LEARNING_RATE: 6e-5  # Valor padrão (será sobrescrito pelo sweep)
 OPTIMIZER_MOMENTUM: [0.9, 0.999]
 SCALE_FACTOR: 0.8
 DROP_PATH_RATE: 0.1
 LABEL_SMOOTHING: 0.1
+WEIGHT_DECAY: 0.05
+LAYER_SCALE: 0.85
 
 # Configurações de hardware e execução
 NUM_WORKERS: 4

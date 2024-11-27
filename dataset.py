@@ -47,7 +47,7 @@ class CustomImageModule(pl.LightningDataModule):
             entire_dataset = datasets.ImageFolder(root=self.train_dir, transform=self.image_transform)
 
             # Split dataset into training and validation (80-20 split)
-            train_size = int(0. * len(entire_dataset))
+            train_size = int(0.8 * len(entire_dataset))
             val_size = len(entire_dataset) - train_size
             self.train_ds, self.val_ds = random_split(entire_dataset, [train_size, val_size])
 
