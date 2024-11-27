@@ -5,6 +5,7 @@ CSV_TRAIN_DIR: "imagens_csv/flavia/train"
 CSV_TEST_DIR: "imagens_csv/flavia/test"  # Corrigido aqui
 PROJECT: "flavia_ensemble_224"
 CHECKPOINT_PATH: "checkpoints_config2"
+BEST_CHECKPOINT_PATH: "/home/rodrigoduarte/Documentos/projeto/checkpoints_config/epochepoch=99-val_lossval_loss=0.67.ckpt"
 NAME_DATASET: "FLAVIA"
 
 # Hiperparâmetros relacionados à configuração do modelo
@@ -23,6 +24,7 @@ DROP_PATH_RATE: 0.1
 LABEL_SMOOTHING: 0.1
 WEIGHT_DECAY: 0.05
 LAYER_SCALE: 0.85
+MLP_VECTOR_MODEL_SCALE: 2
 
 # Configurações de hardware e execução
 NUM_WORKERS: 4

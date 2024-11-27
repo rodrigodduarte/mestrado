@@ -214,7 +214,7 @@ class CustomModel(pl.LightningModule):
 class CustomEnsembleModel(pl.LightningModule):
     def __init__(self, name_dataset, shape, epochs, learning_rate, features_dim, scale_factor,
                  drop_path_rate, num_classes, label_smoothing, optimizer_momentum,
-                 weight_decay, layer_scale):
+                 weight_decay, layer_scale, mlp_vector_model_scale):
         
         super(CustomEnsembleModel, self).__init__()
 
@@ -234,6 +234,7 @@ class CustomEnsembleModel(pl.LightningModule):
         self.optimizer_momentum = optimizer_momentum
         self.weight_decay= weight_decay
         self.layer_scale = layer_scale
+        self.mlp_vector_model_scale = mlp_vector_model_scale
         self.fn_loss = nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)
         
         # Métricas
@@ -252,14 +253,14 @@ class CustomEnsembleModel(pl.LightningModule):
 
         # Modelo MLP ajustado
         self.mlp_vector_model = nn.Sequential(
-            nn.Linear(features_dim, int((2/3) * features_dim)),
+            nn.Linear(features_dim, int((self.mlp_vector_model_scale) * features_dim)),
             nn.GELU(approximate='none'),
-            nn.LayerNorm(int((2/3) * features_dim)),
+            nn.LayerNorm(int((self.mlp_vector_model_scale) * features_dim)),
             nn.Dropout(p=0.3)
         )
 
         # Modelo de combinação ajustado
-        adjusted_dim = int((2/3) * features_dim) + 768
+        adjusted_dim = int((self.mlp_vector_model_scale) * features_dim) + 768
         scaled_dim = int(adjusted_dim * self.layer_scale)
 
         self.ensemble_model = nn.Sequential(

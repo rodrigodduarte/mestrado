@@ -2,19 +2,16 @@ import torch
 import pytorch_lightning as pl
 import numpy as np
 
-from pytorch_lightning.callbacks import TQDMProgressBar, EarlyStopping, ModelCheckpoint
-from pytorch_lightning.profilers import PyTorchProfiler
+from pytorch_lightning.callbacks import TQDMProgressBar, ModelCheckpoint
 
-from model import CustomModel
-from dataset import CustomImageModule
-import config as config
-from callbacks import EarlyStoppingAtSpecificEpoch, ImagesPerSecondCallback, StopOnPerfectTestAccuracyCallback
+from model import CustomEnsembleModel
+from dataset import CustomImageCSVModule
+from callbacks import EarlyStoppingAtSpecificEpoch
 
+import yaml
 import wandb
 from pytorch_lightning.loggers import WandbLogger
-
 import random
-import yaml
 
 
 # Carregar hiperparâmetros do arquivo YAML
@@ -24,110 +21,150 @@ def load_hyperparameters(file_path):
     return hyperparams
 
 
+# Configurar sementes para comportamento determinístico
 def set_random_seeds():
     torch.backends.cudnn.deterministic = True
-    random.seed(hash("setting random seeds") % 2**32 - 1)
-    np.random.seed(hash("improves reproducibility") % 2**32 - 1)
-    torch.manual_seed(hash("by removing stochasticity") % 2**32 - 1)
-    torch.cuda.manual_seed_all(hash("so runs are repeatable") % 2**32 - 1)
+    random.seed(42)
+    np.random.seed(42)
+    torch.manual_seed(42)
+    torch.cuda.manual_seed_all(42)
 
 
+# Função principal de treinamento
 def train_model(config=None):
     hyperparams = load_hyperparameters('config.yaml')
 
-    # Inicializar o wandb e acessar os parâmetros variáveis (do sweep)
+    # Inicializar o W&B e acessar os parâmetros do sweep
     with wandb.init(project=hyperparams["PROJECT"], config=config):
-        config_sweep = wandb.config  # Acessar os parâmetros variáveis do sweep
-        # Checar condição global antes de começar o treinamento
+        config_sweep = wandb.config
 
-        # Definir o data module com os hiperparâmetros fixos e os do sweep
-        data_module = CustomImageModule(
-            train_dir=hyperparams['TRAIN_DIR'],  # Fixo
-            test_dir=hyperparams['TEST_DIR'],    # Fixo
-            shape=hyperparams['SHAPE'],          # Fixo
-            batch_size=config_sweep.batch_size,  # Variável do sweep
-            num_workers=hyperparams['NUM_WORKERS']  # Fixo
+        # Configurar o DataModule
+        data_module = CustomImageCSVModule(
+            train_dir=hyperparams['TRAIN_DIR'],
+            test_dir=hyperparams['TEST_DIR'],
+            shape=hyperparams['SHAPE'],
+            batch_size=hyperparams['BATCH_SIZE'],
+            num_workers=hyperparams['NUM_WORKERS']
         )
 
-        # Configurar o modelo com os parâmetros fixos e os variáveis do sweep
-        model = CustomModel(
-            tmodel=hyperparams["TMODEL"],
-            name_dataset= hyperparams["NAME_DATASET"],
-            shape = hyperparams["SHAPE"],
-            epochs=hyperparams['MAX_EPOCHS'],               # Fixo
-            learning_rate=config_sweep.learning_rate,       # Variável do sweep
-            scale_factor=hyperparams['SCALE_FACTOR'],       # Fixo
-            drop_path_rate=hyperparams['DROP_PATH_RATE'],   # Fixo
-            num_classes=hyperparams['NUM_CLASSES'],         # Fixo
-            label_smoothing=hyperparams['LABEL_SMOOTHING'],
-            optimizer_momentum=hyperparams['OPTIMIZER_MOMENTUM']  # Fixo
-        )  
+        # Configurar o modelo
+        model = CustomEnsembleModel(
+            name_dataset=hyperparams["NAME_DATASET"],
+            shape=hyperparams["SHAPE"],
+            epochs=hyperparams['MAX_EPOCHS'],
+            learning_rate=float(config_sweep.learning_rate),
+            features_dim=hyperparams["FEATURES_DIM"],
+            scale_factor=hyperparams['SCALE_FACTOR'],
+            drop_path_rate=config_sweep.drop_path_rate,
+            num_classes=hyperparams['NUM_CLASSES'],
+            label_smoothing=config_sweep.label_smoothing,
+            optimizer_momentum=(config_sweep.optimizer_momentum, 0.999),  # AdamW usa dois betas
+            weight_decay=float(config_sweep.weight_decay),
+            layer_scale=config_sweep.layer_scale,
+            mlp_vector_model_scale=config_sweep.mlp_vector_model_scale
+        )
 
         # Configurar o logger do W&B
         wandb_logger = WandbLogger(project=hyperparams["PROJECT"])
 
-
-        # Defina o limiar e a paciência
-        threshold = 0.8  
-        stop_epoch = 8
-        # Inicialize o callback
-        early_stopping_threshold_callback_10 = EarlyStoppingAtSpecificEpoch(stop_epoch=10, threshold=0.8)
-        early_stopping_threshold_callback_30 = EarlyStoppingAtSpecificEpoch(stop_epoch=35, threshold=0.67)
-        # Configurar o Trainer do PyTorch Lightning
-        trainer = pl.Trainer(
-            logger=wandb_logger,    # W&B integration
-            log_every_n_steps=10,
-            accelerator=hyperparams['ACCELERATOR'],  # Fixo
-            devices=hyperparams['DEVICES'],          # Fixo
-            precision=hyperparams['PRECISION'],      # Fixo
-            max_epochs=hyperparams['MAX_EPOCHS'],    # Fixo
-            callbacks=[
-                TQDMProgressBar(leave=True),
-                ImagesPerSecondCallback(),
-                StopOnPerfectTestAccuracyCallback()
-            ]
+        checkpoint_callback = ModelCheckpoint(
+            monitor="val_loss",
+            dirpath=hyperparams["CHECKPOINT_PATH"],
+            filename="epoch{epoch}-val_loss{val_loss:.2f}",
+            save_top_k=1,
+            mode="min",
+            verbose=True
         )
 
-        # Treinando o modelo
+        # Callback de Early Stopping
+        early_stopping_callback = EarlyStoppingAtSpecificEpoch(
+            patience=5,
+            threshold=1e-3,
+            monitor="val_loss",
+            mode="min",
+            verbose=True
+        )
+
+        # Configurar o Trainer
+        trainer = pl.Trainer(
+            logger=wandb_logger,
+            log_every_n_steps=10,
+            accelerator=hyperparams['ACCELERATOR'],
+            devices=hyperparams['DEVICES'],
+            precision=hyperparams['PRECISION'],
+            max_epochs=hyperparams['MAX_EPOCHS'],
+            callbacks=[TQDMProgressBar(leave=True), 
+                       checkpoint_callback,
+                       early_stopping_callback]
+        )
+
+        # Treinamento
         trainer.fit(model, data_module)
 
-        # Testando o modelo
+        # Testar o modelo
         trainer.test(model, data_module)
 
-
-
         wandb.finish()
+
 
 if __name__ == "__main__":
     # Login no W&B
     wandb.login()
     hyperparams = load_hyperparameters('config.yaml')
 
-    # Configurar seeds para comportamento determinístico
+    # Configurar sementes
     set_random_seeds()
 
-    # Configurando o sweep
+    # Configurar o sweep
     sweep_config = {
-        'method': 'random',  # método de busca aleatória
+        'method': 'random',  # Random search
         'metric': {
             'name': 'val_loss',
-            'goal': 'minimize'  # otimizar a acurácia de validação
+            'goal': 'minimize'
         },
         'parameters': {
-            'batch_size': {
-                'values': [32]  # valores de batch size a serem testados
-            },
             'learning_rate': {
-                'min': 9e-6,           # valor mínimo da learning rate
-                'max': 7e-5            # valor máximo da learning rate
+                'min': 1e-5,
+                'max': 1e-4,
+                'distribution': 'uniform'
+            },
+            'weight_decay': {
+                'min': 1e-9,
+                'max': 1e-6,
+                'distribution': 'uniform'
+            },
+            'optimizer_momentum': {
+                'min': 0.85,
+                'max': 0.99,
+                'distribution': 'uniform'
+            },
+            'mlp_vector_model_scale': {
+                'min': 0.5,
+                'max': 1.5,
+                'distribution': 'uniform'
+            },
+            'layer_scale': {
+                'min': 0.5,
+                'max': 1.5,
+                'distribution': 'uniform'
+            },
+            'drop_path_rate': {
+                'min': 0.0,
+                'max': 0.5,
+                'distribution': 'uniform'
+            },
+            'label_smoothing': {
+                'min': 0.0,
+                'max': 0.2,
+                'distribution': 'uniform'
             }
         }
     }
 
-    # Criar o sweep no W&B
+    # Criar o sweep
     sweep_id = wandb.sweep(sweep_config, project=hyperparams["PROJECT"])
 
     # Executar o sweep
-    wandb.agent(sweep_id, function=train_model, count=50)  # Executa o sweep com 10 variações
+    wandb.agent(sweep_id, function=train_model, count=200)
 
     wandb.finish()

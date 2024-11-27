@@ -5,10 +5,10 @@ import numpy as np
 from pytorch_lightning.callbacks import TQDMProgressBar, EarlyStopping, ModelCheckpoint
 from pytorch_lightning.profilers import PyTorchProfiler
 
-from model import CustomModel, CustomEnsembleModel
+from model import CustomEnsembleModel
 from dataset import CustomImageModule, CustomImageCSVModule
 import config as config
-from callbacks import  ImagesPerSecondCallback, StopOnPerfectTestAccuracyCallback
+from callbacks import  ImagesPerSecondCallback
 
 import wandb
 from pytorch_lightning.loggers import WandbLogger
@@ -61,7 +61,8 @@ def train_model(config=None):
             label_smoothing=hyperparams['LABEL_SMOOTHING'],
             optimizer_momentum=hyperparams['OPTIMIZER_MOMENTUM'],
             weight_decay=float(hyperparams["WEIGHT_DECAY"]),
-            layer_scale = hyperparams["LAYER_SCALE"]
+            layer_scale = hyperparams["LAYER_SCALE"],
+            mlp_vector_model_scale = hyperparams["MLP_VECTOR_MODEL_SCALE"]
         )
 
         
