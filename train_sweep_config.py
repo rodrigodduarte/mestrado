@@ -1,3 +1,4 @@
+import os
 import torch
 import pytorch_lightning as pl
 import numpy as np
@@ -6,13 +7,25 @@ from pytorch_lightning.callbacks import TQDMProgressBar, ModelCheckpoint
 
 from model import CustomEnsembleModel
 from dataset import CustomImageCSVModule
-from callbacks import EarlyStoppingAtSpecificEpoch
+from callbacks import EarlyStoppingAtSpecificEpoch, SaveBestOrLastModelCallback, EarlyStopOnAccuracyCallback
 
 import yaml
 import wandb
 from pytorch_lightning.loggers import WandbLogger
 import random
 
+import os
+import platform
+import subprocess
+import ctypes
+
+import shutil
+
+def empty_trash():
+    trash_path = os.path.expanduser("~/.local/share/Trash")
+    if os.path.exists(trash_path):
+        subprocess.run(["rm", "-rf", f"{trash_path}/files/*", f"{trash_path}/info/*"])
+        print("Lixeira esvaziada com sucesso no Linux.")
 
 # Carregar hiperparâmetros do arquivo YAML
 def load_hyperparameters(file_path):
@@ -49,6 +62,7 @@ def train_model(config=None):
 
         # Configurar o modelo
         model = CustomEnsembleModel(
+            tmodel=hyperparams["TMODEL"],
             name_dataset=hyperparams["NAME_DATASET"],
             shape=hyperparams["SHAPE"],
             epochs=hyperparams['MAX_EPOCHS'],
@@ -67,23 +81,31 @@ def train_model(config=None):
         # Configurar o logger do W&B
         wandb_logger = WandbLogger(project=hyperparams["PROJECT"])
 
-        checkpoint_callback = ModelCheckpoint(
-            monitor="val_loss",
-            dirpath=hyperparams["CHECKPOINT_PATH"],
-            filename="epoch{epoch}-val_loss{val_loss:.2f}",
-            save_top_k=1,
-            mode="min",
-            verbose=True
-        )
+        run_name = wandb.run.name
+        checkpoint_path = f"{hyperparams['CHECKPOINT_PATH']}/{run_name}.ckpt"
+
+        save_model_callback = SaveBestOrLastModelCallback(checkpoint_path)
+        # checkpoint_callback = ModelCheckpoint(
+        #     monitor="val_accuracy",
+        #     dirpath=hyperparams["CHECKPOINT_PATH"],
+        #     filename=f"{run_name}",
+        #     save_top_k=1,
+        #     mode="max",
+        #     verbose=True
+        # )
 
         # Callback de Early Stopping
-        early_stopping_callback = EarlyStoppingAtSpecificEpoch(
-            patience=5,
+        epoch_callback = EarlyStoppingAtSpecificEpoch(
+            patience=4,
             threshold=1e-3,
             monitor="val_loss",
             mode="min",
             verbose=True
         )
+
+        early_stop_callback = EarlyStopOnAccuracyCallback(
+            target_accuracy=0.8,
+            max_epoch=10)
 
         # Configurar o Trainer
         trainer = pl.Trainer(
@@ -94,15 +116,40 @@ def train_model(config=None):
             precision=hyperparams['PRECISION'],
             max_epochs=hyperparams['MAX_EPOCHS'],
             callbacks=[TQDMProgressBar(leave=True), 
-                       checkpoint_callback,
-                       early_stopping_callback]
+                       save_model_callback,
+                       epoch_callback,
+                       early_stop_callback]
         )
 
         # Treinamento
         trainer.fit(model, data_module)
 
-        # Testar o modelo
+        # Carregar o melhor modelo salvo após o treinamento
+        model = CustomEnsembleModel.load_from_checkpoint(checkpoint_path)
+
+        # Testar o modelo carregado
         trainer.test(model, data_module)
+
+        # Remover todos os arquivos na pasta de checkpoints
+        checkpoint_dir = os.path.dirname(checkpoint_path)
+
+        if os.path.exists(checkpoint_dir):
+            for file_name in os.listdir(checkpoint_dir):
+                file_path = os.path.join(checkpoint_dir, file_name)
+                if os.path.isfile(file_path):  # Garante que é um arquivo
+                    os.remove(file_path)
+            print(f"Todos os arquivos foram removidos da pasta {checkpoint_dir}.")
+
+
+        empty_trash()
+
+        # Excluir a pasta do projeto
+        project_dir = os.path.expanduser(hyperparams["PROJECT"])
+        if os.path.exists(project_dir):
+            shutil.rmtree(project_dir)
+            print(f"A pasta {project_dir} foi excluída com sucesso.")
+        else:
+            print(f"A pasta {project_dir} não existe e não foi excluída.")  
 
         wandb.finish()
 
@@ -125,22 +172,22 @@ if __name__ == "__main__":
         'parameters': {
             'learning_rate': {
                 'min': 1e-5,
-                'max': 1e-4,
+                'max': 2e-4,
                 'distribution': 'uniform'
             },
             'weight_decay': {
-                'min': 1e-9,
+                'min': 1e-7,
                 'max': 1e-6,
                 'distribution': 'uniform'
             },
             'optimizer_momentum': {
-                'min': 0.85,
+                'min': 0.92,
                 'max': 0.99,
                 'distribution': 'uniform'
             },
             'mlp_vector_model_scale': {
-                'min': 0.5,
-                'max': 1.5,
+                'min': 0.8,
+                'max': 1.3,
                 'distribution': 'uniform'
             },
             'layer_scale': {

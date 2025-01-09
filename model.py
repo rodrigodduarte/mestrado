@@ -14,7 +14,8 @@ from torchvision.models.swin_transformer import (swin_t, Swin_T_Weights,
                                                  swin_s, Swin_S_Weights,
                                                  swin_b, Swin_B_Weights)
 import torchmetrics
-from torchmetrics import Accuracy
+from torchmetrics import Accuracy, F1Score, Precision, Recall, ConfusionMatrix
+from torchmetrics.classification import MulticlassConfusionMatrix
 
 import pytorch_lightning as pl
 
@@ -101,7 +102,7 @@ class CustomModel(pl.LightningModule):
             self.model.head = nn.Linear(in_features=1024, out_features=self.num_classes, bias=True)
         
         if tmodel == "cct_224":
-            self.model = cct_14_7x2_224(pretrained=True, progress=True)
+            self.dl_model = cct_14_7x2_224(pretrained=True, progress=True)
             self.sequential_layers = nn.Sequential(
                 nn.Flatten(start_dim=1),
                 nn.LayerNorm(384, eps=1e-6, elementwise_affine=True),
@@ -212,7 +213,7 @@ class CustomModel(pl.LightningModule):
       
 
 class CustomEnsembleModel(pl.LightningModule):
-    def __init__(self, name_dataset, shape, epochs, learning_rate, features_dim, scale_factor,
+    def __init__(self, tmodel, name_dataset, shape, epochs, learning_rate, features_dim, scale_factor,
                  drop_path_rate, num_classes, label_smoothing, optimizer_momentum,
                  weight_decay, layer_scale, mlp_vector_model_scale):
         
@@ -221,7 +222,8 @@ class CustomEnsembleModel(pl.LightningModule):
         self.save_hyperparameters(ignore=["method", "metric.goal", "metric.name","parameters.batch_size",
                                           "parameters.layer_scale", "parameters.learning_rate.distribution",
                                           "parameters.learning_rate.max", "parameters.learning_rate.min"])
-
+        
+        self.tmodel = tmodel
         self.name_dataset = name_dataset
         self.shape = shape
         self.epochs = epochs
@@ -237,19 +239,78 @@ class CustomEnsembleModel(pl.LightningModule):
         self.mlp_vector_model_scale = mlp_vector_model_scale
         self.fn_loss = nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)
         
+        self.model_dim = 0
+
         # Métricas
         self.train_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
         self.val_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
         self.test_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
 
+        self.train_f1 = F1Score(task="multiclass", num_classes=num_classes)
+        self.val_f1 = F1Score(task="multiclass", num_classes=num_classes)       
+        self.test_f1 = F1Score(task="multiclass", num_classes=num_classes) 
+        
+        self.train_precision = Precision(task="multiclass", num_classes=num_classes)
+        self.val_precision = Precision(task="multiclass", num_classes=num_classes)
+        self.test_precision = Precision(task="multiclass", num_classes=num_classes)
+        
+        self.train_recall = Recall(task="multiclass", num_classes=num_classes)
+        self.val_recall = Recall(task="multiclass", num_classes=num_classes)
+        self.test_recall = Recall(task="multiclass", num_classes=num_classes)
 
-        self.dl_model = models.convnext_tiny(weights=ConvNeXt_Tiny_Weights.DEFAULT, 
-                                        drop_path_rate=self.drop_path_rate)
-        self.sequential_layers = nn.Sequential(
+        self.confusion_matrix = MulticlassConfusionMatrix(num_classes=num_classes)                
+
+
+        # self.dl_model = models.convnext_tiny(weights=ConvNeXt_Tiny_Weights.DEFAULT, 
+        #                                 drop_path_rate=self.drop_path_rate)
+        
+                # Escolha do modelo
+        if tmodel == "convnext_t":
+            self.model_dim = 768
+            self.dl_model = models.convnext_tiny(weights=ConvNeXt_Tiny_Weights.DEFAULT, 
+                                            drop_path_rate=self.drop_path_rate)
+            self.sequential_layers = nn.Sequential(
+                nn.Flatten(start_dim=1),
+                nn.LayerNorm(self.model_dim, eps=1e-6, elementwise_affine=True),
+            )
+            self.dl_model.classifier = self.sequential_layers
+
+        if tmodel == "swint_t":
+            self.model_dim = 768
+            self.dl_model = swin_t(weights=Swin_T_Weights.DEFAULT)
+            self.sequential_layers = nn.Sequential(
+                nn.Flatten(start_dim=1),
+                nn.LayerNorm(self.model_dim, eps=1e-6, elementwise_affine=True),
+                )
+            self.dl_model.head = self.sequential_layers
+
+        if tmodel == "cct_224":
+            self.model_dim = 384
+            self.dl_model = cct_14_7x2_224(pretrained=True, progress=True)
+            self.sequential_layers = nn.Sequential(
+                nn.Flatten(start_dim=1),
+                nn.LayerNorm(self.model_dim, eps=1e-6, elementwise_affine=True),
+            )
+            self.dl_model.classifier.fc = self.sequential_layers
+
+        if tmodel == "cct_384":
+            self.model_dim = 384
+            self.dl_model = cct_14_7x2_384(pretrained=True, progress=True)
+            self.sequential_layers = nn.Sequential(
             nn.Flatten(start_dim=1),
-            nn.LayerNorm(768, eps=1e-6, elementwise_affine=True)
-        )
-        self.dl_model.classifier = self.sequential_layers
+            nn.LayerNorm(self.model_dim, eps=1e-6, elementwise_affine=True)
+                )
+            self.dl_model.classifier.fc = self.sequential_layers
+
+        if tmodel == "cct_384_fl":
+            self.model_dim = 384
+            self.dl_model = cct_14_7x2_384_fl(pretrained=True, progress=True)
+            self.sequential_layers = nn.Sequential(
+            nn.Flatten(start_dim=1),
+            nn.LayerNorm(self.model_dim, eps=1e-6, elementwise_affine=True)
+                )
+            self.model.classifier.fc = self.sequential_layers
+
 
         # Modelo MLP ajustado
         self.mlp_vector_model = nn.Sequential(
@@ -260,7 +321,7 @@ class CustomEnsembleModel(pl.LightningModule):
         )
 
         # Modelo de combinação ajustado
-        adjusted_dim = int((self.mlp_vector_model_scale) * features_dim) + 768
+        adjusted_dim = int((self.mlp_vector_model_scale) * features_dim) + self.model_dim
         scaled_dim = int(adjusted_dim * self.layer_scale)
 
         self.ensemble_model = nn.Sequential(
