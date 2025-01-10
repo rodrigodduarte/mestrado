@@ -31,12 +31,30 @@ class CustomImageModule(pl.LightningDataModule):
             v2.Resize(self.shape, interpolation=PIL.Image.BILINEAR, antialias=False),
             v2.ToDtype(torch.uint8, scale=True),
 
+            # Geometric Transformations
             v2.RandomHorizontalFlip(p=0.1),
             v2.RandomVerticalFlip(p=0.1),
-            v2.RandomErasing(p=0.25),
+            v2.RandomRotation(degrees=30),  # Random rotation up to ±30°
+
+            # Color Transformations
+            v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+            v2.RandomApply([v2.Grayscale(num_output_channels=3)], p=0.1),  # Grayscale with probability
+
+            # Noise and Blur
+            v2.RandomApply([v2.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 2.0))], p=0.2),  # Gaussian blur
+            
+            # Random Erasing
+            v2.RandomErasing(p=0.25, scale=(0.02, 0.1), ratio=(0.3, 3.3)),
+            
+            # Elastic Transformations
+            v2.RandomPerspective(distortion_scale=0.2, p=0.2),
+
+            # RandAugment
             v2.RandAugment(num_ops=9, magnitude=5),
+
             v2.ToDtype(torch.float32, scale=True),
-            v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        
             # v2.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 2.0)),
             # v2.Grayscale(num_output_channels=3)
 

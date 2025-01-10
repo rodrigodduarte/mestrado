@@ -1,9 +1,7 @@
 # Caminhos dos diretórios de treino e teste
 TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/train"
 TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/test"
-CSV_TRAIN_DIR: "imagens_csv/flavia/train"
-CSV_TEST_DIR: "imagens_csv/flavia/test"  # Corrigido aqui
-PROJECT: "flavia_ensemble"
+PROJECT: "flavia_t_ensemble"
 CHECKPOINT_PATH: "checkpoints_config2"
 BEST_CHECKPOINT_PATH: "/home/rodrigoduarte/Documentos/projeto/checkpoints_config/epochepoch=99-val_lossval_loss=0.67.ckpt"
 NAME_DATASET: "flavia"
@@ -14,7 +12,7 @@ SHAPE: [224, 224]
 FEATURES_DIM: 648
 HIDDEN_LAYERS: 2
 HIDDEN_UNITS: 1296
-MAX_EPOCHS: 65
+MAX_EPOCHS: 50
 NUM_CLASSES: 32
 BATCH_SIZE: 32  # Valor padrão (será sobrescrito pelo sweep)
 LEARNING_RATE: 6e-5  # Valor padrão (será sobrescrito pelo sweep)

@@ -3,7 +3,7 @@ import shutil
 from sklearn.model_selection import train_test_split
 
 # Caminho para o diretório contendo suas classes com imagens
-caminho_diretorio_original = 'imagens/flavia_processed'
+caminho_diretorio_original = 'imagens/flavia_t'
 caminho_diretorio_novo = 'imagens/flavia'
 
 # Lista de todas as classes no diretório original
@@ -20,7 +20,7 @@ for classe in classes:
     # Lista de todas as imagens na classe
     imagens = os.listdir(caminho_classe_original)
     
-    # Dividir as imagens em conjuntos de treino e teste (75% treino, 25% teste)
+    # Dividir as imagens em conjuntos de treino e teste (80% treino, 20% teste)
     treino, teste = train_test_split(imagens, test_size=0.2, random_state=42)
     
     # Criar diretórios de treino e teste para a classe no novo diretório

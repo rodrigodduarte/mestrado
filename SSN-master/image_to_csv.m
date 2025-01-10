@@ -36,7 +36,7 @@ for i = 1:length(subDirs)
             image = imread(imagePath);
             
             % % Redimensiona a imag em
-            image = imresize(image, [384, 384]);
+            image = imresize(image, [224, 224]);
             
             % Aplica a função SSN
             features = SSN(image, 6); % Altere o segundo parâmetro conforme necessário
