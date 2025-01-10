@@ -54,9 +54,18 @@ class CustomImageModule(pl.LightningDataModule):
 
             v2.ToDtype(torch.float32, scale=True),
             v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        
-            # v2.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 2.0)),
-            # v2.Grayscale(num_output_channels=3)
+            # v2.ToImage(),
+            # v2.Resize(self.shape, interpolation=PIL.Image.BILINEAR, antialias=False),
+            # v2.ToDtype(torch.uint8, scale=True),
+
+            # v2.RandomHorizontalFlip(p=0.1),
+            # v2.RandomVerticalFlip(p=0.1),
+            # v2.RandomErasing(p=0.25),
+            # v2.RandAugment(num_ops=9, magnitude=5),
+            # v2.ToDtype(torch.float32, scale=True),
+            # v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            # # v2.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 2.0)),
+            # # v2.Grayscale(num_output_channels=3)
 
         ])
 
