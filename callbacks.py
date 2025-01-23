@@ -88,59 +88,60 @@ class EarlyStoppingAtSpecificEpoch(Callback):
                     print(f"Treinamento interrompido antecipadamente devido à falta de melhoria em {self.monitor}.")
                 trainer.should_stop = True
 
+
 class SaveBestOrLastModelCallback(Callback):
     def __init__(self, save_path):
         """
-        Callback para salvar o melhor modelo com 100% de val_accuracy e menor val_loss.
-        Caso nenhum modelo alcance 100% de val_accuracy, salva o modelo da última época.
-        
+        Callback para salvar o melhor modelo com base no menor val_loss.
+        Caso não seja possível obter val_loss, salva o modelo da última época
+        ao final do treinamento.
+
         Args:
-            save_path (str): Caminho para salvar o modelo.
+            save_path (str): Caminho base para salvar o modelo (best).
         """
         super().__init__()
         self.save_path = save_path
         self.best_val_loss = float('inf')
-        self.best_val_accuracy = 0.0
+        self.best_epoch = None  # Armazenará a época em que obtemos o melhor val_loss
         self.last_epoch_path = None
 
     def on_validation_end(self, trainer, pl_module):
         """
         Executado ao final de cada época de validação.
-        
-        Args:
-            trainer (pl.Trainer): Instância do Trainer.
-            pl_module (pl.LightningModule): Instância do módulo Lightning.
         """
         # Obtenha as métricas atuais
         metrics = trainer.callback_metrics
-        val_accuracy = metrics.get("val_accuracy", 0.0)
         val_loss = metrics.get("val_loss", float('inf'))
 
-        # Salva o modelo da última época
+        # Caminho para o modelo da última época
         self.last_epoch_path = f"{self.save_path}_last.ckpt"
+
+        # Sempre salva o checkpoint da última época
         trainer.save_checkpoint(self.last_epoch_path)
 
-        # Verifica se o modelo é melhor com base nas condições
-        if val_accuracy == 1.0 and val_loss < self.best_val_loss:
+        # Verifica se o val_loss atual é o melhor até agora
+        if val_loss < self.best_val_loss:
             self.best_val_loss = val_loss
-            self.best_val_accuracy = val_accuracy
-
-            # Salve o melhor modelo
+            self.best_epoch = trainer.current_epoch  # Salva a época do melhor modelo
+            # Salva o melhor modelo com base no val_loss
             trainer.save_checkpoint(self.save_path)
-            print(f"Novo modelo salvo com 100% val_accuracy e menor val_loss: {val_loss}")
+            # Removemos o print aqui para não ficar imprimindo a cada época
 
     def on_fit_end(self, trainer, pl_module):
         """
-        Executado ao final do treinamento. Caso nenhum modelo atinja 100% de val_accuracy,
-        mantém o modelo da última época.
+        Executado ao final do treinamento. Caso não tenha sido registrado
+        nenhum val_loss (mantido em 'inf'), utiliza o modelo da última época.
         """
-        if self.best_val_accuracy == 1.0:
-            print(f"Treinamento finalizado. Melhor modelo salvo com 100% val_accuracy e val_loss: {self.best_val_loss}")
-        else:
-            print("Treinamento finalizado. Nenhum modelo atingiu 100% val_accuracy.")
+        if self.best_val_loss == float('inf'):
+            # Significa que nunca encontramos um val_loss válido
+            print("Treinamento finalizado. Não foi possível obter val_loss válido.")
             if self.last_epoch_path:
                 print(f"Utilizando o modelo da última época salvo em {self.last_epoch_path}.")
+                # Copia o modelo da última época para o 'melhor' caminho:
                 trainer.save_checkpoint(self.save_path)
+        else:
+            print(f"Treinamento finalizado. Melhor val_loss encontrado: {self.best_val_loss:.4f}")
+            print(f"Modelo da época {self.best_epoch} salvo em {self.save_path}.")
 
 
 class EarlyStopOnAccuracyCallback(pl.Callback):
@@ -166,3 +167,36 @@ class EarlyStopOnAccuracyCallback(pl.Callback):
             if val_accuracy < self.target_accuracy:
                 trainer.should_stop = True
                 print(f"Stopping early: val_accuracy {val_accuracy:.4f} did not reach {self.target_accuracy} by epoch {self.max_epoch}.")
+
+class EarlyStopCallback(pl.callbacks.Callback):
+    def __init__(self, metric_name: str, threshold: float, target_epoch: int):
+        """
+        Callback para interromper o treinamento com base em uma métrica, limite e época específicos.
+
+        Args:
+            metric_name (str): Nome da métrica a ser monitorada (e.g., 'val_loss').
+            threshold (float): Valor limite da métrica.
+            target_epoch (int): Época na qual verificar a métrica (índice começa em 0).
+        """
+        super().__init__()
+        self.metric_name = metric_name
+        self.threshold = threshold
+        self.target_epoch = target_epoch
+
+    def on_validation_epoch_end(self, trainer, pl_module):
+        # Verifica se estamos na época alvo
+        if trainer.current_epoch == self.target_epoch:
+            # Obtém o valor da métrica monitorada
+            metric_value = trainer.callback_metrics.get(self.metric_name)
+
+            if metric_value is None:
+                print(f"Aviso: '{self.metric_name}' não encontrado nos callback_metrics.")
+                return
+
+            # Interrompe o treinamento se o valor da métrica exceder o limite
+            if metric_value >= self.threshold:
+                print(
+                    f"Interrompendo o treinamento na época {trainer.current_epoch + 1}. "
+                    f"{self.metric_name} ({metric_value:.4f}) >= {self.threshold}."
+                )
+                trainer.should_stop = True

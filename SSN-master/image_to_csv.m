@@ -1,7 +1,7 @@
 % Diretório de entrada
-inputDir = '/home/rodrigoduarte/Documentos/projeto/imagens/flavia';
+inputDir = '/home/rodrigoduarte/Documentos/projeto/imagens/D2';
 % Diretório de saída
-outputDir = '/home/rodrigoduarte/Documentos/projeto/imagens/flavia';
+outputDir = '/home/rodrigoduarte/Documentos/projeto/imagens/D2';
 
 % % Criar o diretório de saída se não existir
 % if ~exist(outputDir, 'dir')
@@ -28,7 +28,7 @@ for i = 1:length(subDirs)
         end
         
         % Listar todas as imagens na classe
-        imageFiles = dir(fullfile(classDir, '*.png'));
+        imageFiles = dir(fullfile(classDir, '*.jpg'));
         
         for k = 1:length(imageFiles)
             % Lê a imagem

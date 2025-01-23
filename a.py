@@ -7,7 +7,7 @@ from pytorch_lightning.callbacks import TQDMProgressBar, ModelCheckpoint
 
 from model import CustomEnsembleModel, CustomModel
 from dataset import CustomImageCSVModule, CustomImageModule
-from callbacks import EarlyStoppingAtSpecificEpoch, SaveBestOrLastModelCallback, EarlyStopOnAccuracyCallback
+from callbacks import EarlyStoppingAtSpecificEpoch, SaveBestOrLastModelCallback, EarlyStopCallback
 
 import yaml
 import wandb
@@ -45,7 +45,7 @@ def set_random_seeds():
 
 # Função principal de treinamento
 def train_model(config=None):
-    hyperparams = load_hyperparameters('config2.yaml')
+    hyperparams = load_hyperparameters('config_a.yaml')
 
     # Inicializar o W&B e acessar os parâmetros do sweep
     with wandb.init(project=hyperparams["PROJECT"], config=config):
@@ -99,9 +99,11 @@ def train_model(config=None):
             verbose=True
         )
 
-        early_stop_callback = EarlyStopOnAccuracyCallback(
-            target_accuracy=0.8,
-            max_epoch=10)
+        early_stop_callback = EarlyStopCallback(
+            metric_name="val_loss",  # Métrica a ser monitorada
+            threshold=0.5,          # Valor limite
+            target_epoch=3          # Época em que verificar (índice começa em 0)
+        )
 
         # Configurar o Trainer
         trainer = pl.Trainer(
@@ -153,7 +155,7 @@ def train_model(config=None):
 if __name__ == "__main__":
     # Login no W&B
     wandb.login()
-    hyperparams = load_hyperparameters('config2.yaml')
+    hyperparams = load_hyperparameters('config_a.yaml')
 
     # Configurar sementes
     set_random_seeds()

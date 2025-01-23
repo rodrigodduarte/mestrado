@@ -102,7 +102,7 @@ class CustomModel(pl.LightningModule):
             self.model.head = nn.Linear(in_features=1024, out_features=self.num_classes, bias=True)
         
         if tmodel == "cct_224":
-            self.dl_model = cct_14_7x2_224(pretrained=True, progress=True)
+            self.model = cct_14_7x2_224(pretrained=True, progress=True)
             self.sequential_layers = nn.Sequential(
                 nn.Flatten(start_dim=1),
                 nn.LayerNorm(384, eps=1e-6, elementwise_affine=True),

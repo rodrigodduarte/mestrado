@@ -7,7 +7,7 @@ from pytorch_lightning.callbacks import TQDMProgressBar, ModelCheckpoint
 
 from model import CustomEnsembleModel
 from dataset import CustomImageCSVModule
-from callbacks import EarlyStoppingAtSpecificEpoch, SaveBestOrLastModelCallback, EarlyStopOnAccuracyCallback
+from callbacks import EarlyStoppingAtSpecificEpoch, SaveBestOrLastModelCallback, EarlyStopCallback
 
 import yaml
 import wandb
@@ -96,16 +96,18 @@ def train_model(config=None):
 
         # Callback de Early Stopping
         epoch_callback = EarlyStoppingAtSpecificEpoch(
-            patience=4,
+            patience=2,
             threshold=1e-3,
             monitor="val_loss",
             mode="min",
             verbose=True
         )
 
-        early_stop_callback = EarlyStopOnAccuracyCallback(
-            target_accuracy=0.8,
-            max_epoch=10)
+        early_stop_callback = EarlyStopCallback(
+            metric_name="val_loss",  # Métrica a ser monitorada
+            threshold=0.5,          # Valor limite
+            target_epoch=3          # Época em que verificar (índice começa em 0)
+        )
 
         # Configurar o Trainer
         trainer = pl.Trainer(
