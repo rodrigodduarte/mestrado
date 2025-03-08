@@ -257,84 +257,61 @@ from torchvision import datasets
 import os
 import PIL
 
+from sklearn.model_selection import KFold
+import torch
+from torch.utils.data import DataLoader, Dataset
+import pytorch_lightning as pl
+import torchvision.transforms.v2 as v2
+from torchvision import datasets
+import os
+import PIL
+
 class CustomImageCSVModule_kf(pl.LightningDataModule):
     def __init__(self, train_dir, test_dir, shape, batch_size, num_workers, n_splits=5):
-        """
-        DataModule modificado para suportar Validação Cruzada com K-Folds.
-
-        :param train_dir: Diretório contendo as imagens de treino.
-        :param test_dir: Diretório contendo as imagens de teste.
-        :param shape: Dimensão da imagem (ex: [224, 224]).
-        :param batch_size: Tamanho do lote para treino/validação.
-        :param num_workers: Número de threads para DataLoader.
-        :param n_splits: Número de folds para a validação cruzada.
-        """
         super().__init__()
         self.train_dir = train_dir
         self.test_dir = test_dir
         self.shape = shape
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.n_splits = n_splits  # Número de folds
-        self.kf = KFold(n_splits=self.n_splits, shuffle=True, random_state=42)
+        self.n_splits = n_splits
 
-        # Transformações para as imagens
         self.image_transform = v2.Compose([
             v2.ToImage(),
-            v2.Resize(self.shape, interpolation=PIL.Image.BILINEAR, antialias=False),
-            v2.ToDtype(torch.uint8, scale=True),
-
-            # Transformações Geométricas
+            v2.Resize(self.shape, interpolation=PIL.Image.BILINEAR, antialias=True),
+            v2.ToDtype(torch.float32, scale=True),
             v2.RandomHorizontalFlip(p=0.1),
             v2.RandomVerticalFlip(p=0.1),
-            v2.RandomRotation(degrees=30),  # Rotação aleatória de até ±30°
-
-            # Transformações de Cor
+            v2.RandomRotation(degrees=30),
             v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
-            v2.RandomApply([v2.Grayscale(num_output_channels=3)], p=0.1),  # 10% de chance de converter para escala de cinza
-
-            # Ruído e Desfoque
-            v2.RandomApply([v2.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 2.0))], p=0.2),  # Desfoque gaussiano
-
-            # Apagamento Randômico
+            v2.RandomApply([v2.Grayscale(num_output_channels=3)], p=0.1),
+            v2.RandomApply([v2.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 2.0))], p=0.2),
             v2.RandomErasing(p=0.25, scale=(0.02, 0.1), ratio=(0.3, 3.3)),
-
-            # Transformações Elásticas
-            v2.RandomPerspective(distortion_scale=0.2, p=0.2),
-
-            # Augmentação Randômica
-            v2.RandAugment(num_ops=9, magnitude=5),
-
-            v2.ToDtype(torch.float32, scale=True),
             v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
 
-        # Carregar dataset completo
+        self.train_dir = train_dir
+        self.test_dir = test_dir
         self.full_dataset = datasets.ImageFolder(root=self.train_dir, transform=self.image_transform)
+        self.kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+        self.batch_size = batch_size
+        self.num_workers = num_workers
 
-    def setup(self, fold_idx=0):
-        """
-        Divide os dados em treino e validação baseado no fold atual.
-        :param fold_idx: Índice do fold atual (0 até n_splits-1).
-        """
+    def setup(self, stage=None, fold_idx=0):
         indices = list(range(len(self.full_dataset)))
-        train_indices, val_indices = list(self.kf.split(indices))[fold_idx]
+        splits = list(self.kf.split(indices))
+        train_indices, val_indices = splits[fold_idx]
 
-        # Criar subconjuntos para treino e validação
         self.train_ds = torch.utils.data.Subset(self.full_dataset, train_indices)
         self.val_ds = torch.utils.data.Subset(self.full_dataset, val_indices)
 
-        # Carregar conjunto de teste
         self.test_ds = datasets.ImageFolder(root=self.test_dir, transform=self.image_transform)
 
     def train_dataloader(self):
-        """Retorna o DataLoader de treino."""
         return DataLoader(self.train_ds, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)
-    
+
     def val_dataloader(self):
-        """Retorna o DataLoader de validação."""
         return DataLoader(self.val_ds, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
-    
+
     def test_dataloader(self):
-        """Retorna o DataLoader de teste."""
         return DataLoader(self.test_ds, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
