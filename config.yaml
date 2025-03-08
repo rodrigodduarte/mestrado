@@ -1,10 +1,10 @@
 # Caminhos dos diretórios de treino e teste
 TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/D2/train"
 TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/D2/test"
-PROJECT: "swedish_ensemble_kf"
+PROJECT: "D2_ensemble_kf"
 CHECKPOINT_PATH: "checkpoints_config"
 BEST_CHECKPOINT_PATH: "/home/rodrigoduarte/Documentos/projeto/checkpoints_config/epochepoch=99-val_lossval_loss=0.67.ckpt"
-NAME_DATASET: "swedish"
+NAME_DATASET: "D2"
 
 # Hiperparâmetros relacionados à configuração do modelo
 TMODEL: "swint_t"

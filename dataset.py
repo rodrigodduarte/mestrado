@@ -266,6 +266,15 @@ from torchvision import datasets
 import os
 import PIL
 
+import pytorch_lightning as pl
+from torch.utils.data import DataLoader
+from torchvision.transforms import v2
+import PIL
+from sklearn.model_selection import KFold
+from dataset import CustomImageWithFeaturesDataset
+from torchvision import datasets
+import torch
+
 class CustomImageCSVModule_kf(pl.LightningDataModule):
     def __init__(self, train_dir, test_dir, shape, batch_size, num_workers, n_splits=5):
         super().__init__()
@@ -278,34 +287,44 @@ class CustomImageCSVModule_kf(pl.LightningDataModule):
 
         self.image_transform = v2.Compose([
             v2.ToImage(),
-            v2.Resize(self.shape, interpolation=PIL.Image.BILINEAR, antialias=True),
-            v2.ToDtype(torch.float32, scale=True),
-            v2.RandomHorizontalFlip(p=0.1),
+            v2.Resize(self.shape, interpolation=PIL.Image.BILINEAR, antialias=False),
+            v2.ToDtype(torch.uint8, scale=True),
+
+            v2.RandomHorizontalFlip(),
             v2.RandomVerticalFlip(p=0.1),
-            v2.RandomRotation(degrees=30),
-            v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
-            v2.RandomApply([v2.Grayscale(num_output_channels=3)], p=0.1),
-            v2.RandomApply([v2.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 2.0))], p=0.2),
-            v2.RandomErasing(p=0.25, scale=(0.02, 0.1), ratio=(0.3, 3.3)),
-            v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            v2.RandomErasing(p=0.25),
+            v2.RandAugment(num_ops=9, magnitude=5),
+
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
 
-        self.train_dir = train_dir
-        self.test_dir = test_dir
-        self.full_dataset = datasets.ImageFolder(root=self.train_dir, transform=self.image_transform)
-        self.kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
-        self.batch_size = batch_size
-        self.num_workers = num_workers
+        self.kf = KFold(n_splits=self.n_splits, shuffle=True, random_state=42)
 
     def setup(self, stage=None, fold_idx=0):
-        indices = list(range(len(self.full_dataset)))
-        splits = list(self.kf.split(indices))
-        train_indices, val_indices = splits[fold_idx]
+        # Dataset personalizado que carrega imagens e características adicionais (features de CSV)
+        if stage == 'fit' or stage is None:
+        
+            self.full_dataset = CustomImageWithFeaturesDataset(
+                data_dir=self.train_dir,
+                transform=self.image_transform
+            )
 
-        self.train_ds = torch.utils.data.Subset(self.full_dataset, train_indices)
-        self.val_ds = torch.utils.data.Subset(self.full_dataset, val_indices)
+            # Gerando índices para validação cruzada
+            indices = list(range(len(self.full_dataset)))
+            splits = list(self.kf.split(indices))
+            train_indices, val_indices = splits[fold_idx]
 
-        self.test_ds = datasets.ImageFolder(root=self.test_dir, transform=self.image_transform)
+            # Dividindo em treino e validação
+            self.train_ds = torch.utils.data.Subset(self.full_dataset, train_indices)
+            self.val_ds = torch.utils.data.Subset(self.full_dataset, val_indices)
+
+        if stage == "test" or stage is None:
+            # Dataset de teste
+            self.test_ds = CustomImageWithFeaturesDataset(
+                data_dir=self.test_dir,
+                transform=self.image_transform
+            )
 
     def train_dataloader(self):
         return DataLoader(self.train_ds, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)

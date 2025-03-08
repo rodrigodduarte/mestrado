@@ -25,16 +25,17 @@ def load_hyperparameters(file_path):
 # Configuração das sementes para garantir reprodutibilidade
 def set_random_seeds():
     torch.backends.cudnn.deterministic = True
-    random.seed(42)
-    np.random.seed(42)
-    torch.manual_seed(42)
-    torch.cuda.manual_seed_all(42)
+    random.seed(hash("setting random seeds") % 2**32 - 1)
+    np.random.seed(hash("improves reproducibility") % 2**32 - 1)
+    torch.manual_seed(hash("by removing stochasticity") % 2**32 - 1)
+    torch.cuda.manual_seed_all(hash("so runs are repeatable") % 2**32 - 1)
+
 
 # Função principal de treinamento com validação cruzada
 def train_model_kf(config=None):
     hyperparams = load_hyperparameters('config.yaml')
     k_splits = hyperparams.get('K_FOLDS', 5)
-
+    print(k_splits)
     with wandb.init(project=hyperparams["PROJECT"], config=config):
         config_sweep = wandb.config
 
