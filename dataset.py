@@ -276,6 +276,7 @@ from torchvision import datasets
 import torch
 
 class CustomImageCSVModule_kf(pl.LightningDataModule):
+    
     def __init__(self, train_dir, test_dir, shape, batch_size, num_workers, n_splits=5):
         super().__init__()
         self.train_dir = train_dir
@@ -334,3 +335,50 @@ class CustomImageCSVModule_kf(pl.LightningDataModule):
 
     def test_dataloader(self):
         return DataLoader(self.test_ds, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
+
+from sklearn.model_selection import StratifiedKFold
+
+class CustomDataset_kf(Dataset):
+    def __init__(self, csv_file, image_dir, transform=None):
+        self.data = pd.read_csv(csv_file)
+        self.image_dir = image_dir
+        self.transform = transform
+        self.filepaths = self.data['image_path'].apply(lambda x: os.path.join(image_dir, x)).tolist()
+        self.labels = self.data['label'].values
+
+    def __len__(self):
+        return len(self.filepaths)
+
+    def __getitem__(self, idx):
+        image_path = self.filepaths[idx]
+        image = Image.open(image_path).convert('RGB')
+        label = self.labels[idx]
+        
+        if self.transform:
+            image = self.transform(image)
+        
+        return image, label
+
+
+def get_folds(filepaths, labels, n_splits=5, random_state=42):
+    """Gera índices para validação cruzada estratificada."""
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_state)
+    return list(skf.split(filepaths, labels))
+
+
+def create_dataloaders(csv_file, image_dir, batch_size=32, num_workers=4, transform=None):
+    """Cria dataloaders para treino e validação cruzada."""
+    dataset = CustomDataset_kf(csv_file, image_dir, transform=transform)
+    folds = get_folds(dataset.filepaths, dataset.labels)
+    
+    dataloaders = []
+    for train_idx, val_idx in folds:
+        train_subset = torch.utils.data.Subset(dataset, train_idx)
+        val_subset = torch.utils.data.Subset(dataset, val_idx)
+        
+        train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+        
+        dataloaders.append((train_loader, val_loader))
+    
+    return dataloaders

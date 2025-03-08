@@ -2,128 +2,133 @@ import os
 import torch
 import pytorch_lightning as pl
 import numpy as np
-import wandb
+
+from torch.utils.data import Dataset, DataLoader
+
+from pytorch_lightning.callbacks import TQDMProgressBar, ModelCheckpoint
+
+from sklearn.model_selection import StratifiedKFold
+
+from model import CustomEnsembleModel
+from dataset import CustomDataset_kf
+from callbacks import EarlyStoppingAtSpecificEpoch, SaveBestOrLastModelCallback, EarlyStopCallback
+
 import yaml
+import wandb
+from pytorch_lightning.loggers import WandbLogger
 import random
 
-from pytorch_lightning.callbacks import TQDMProgressBar
-from pytorch_lightning.loggers import WandbLogger
-from model import CustomEnsembleModel
-from dataset import CustomImageCSVModule_kf
-from callbacks import (
-    EarlyStoppingAtSpecificEpoch,
-    SaveBestOrLastModelCallback,
-    EarlyStopCallback
-)
+import os
+import platform
+import subprocess
+import ctypes
 
-# Carrega hiperparâmetros do arquivo config.yaml
-def load_hyperparameters(file_path):
-    with open(file_path, 'r') as file:
-        hyperparams = yaml.safe_load(file)
-    return hyperparams
+import shutil
 
-# Configuração das sementes para garantir reprodutibilidade
+# Carregar hiperparâmetros
+def load_hyperparameters(path='config.yaml'):
+    import yaml
+    with open(path, 'r') as file:
+        return yaml.safe_load(file)
+
+
 def set_random_seeds():
     torch.backends.cudnn.deterministic = True
-    random.seed(hash("setting random seeds") % 2**32 - 1)
-    np.random.seed(hash("improves reproducibility") % 2**32 - 1)
-    torch.manual_seed(hash("by removing stochasticity") % 2**32 - 1)
-    torch.cuda.manual_seed_all(hash("so runs are repeatable") % 2**32 - 1)
+    random.seed(42)
+    np.random.seed(42)
+    torch.manual_seed(42)
+    torch.cuda.manual_seed_all(42)
+
+
+def train_epoch(model, loader, criterion, optimizer, device):
+    model.train()
+    running_loss = 0
+    for inputs, labels in loader:
+        inputs, labels = inputs.to(device), labels.to(device)
+        optimizer.zero_grad()
+        outputs = model(inputs)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+
+
+def evaluate(model, dataloader, device):
+    model.eval()
+    correct, total = 0, 0
+    with torch.no_grad():
+        for inputs, labels in dataloader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = model(inputs)
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+    return correct / total
 
 
 # Função principal de treinamento com validação cruzada
-def train_model_kf(config=None):
+def train_cv(config=None):
+    set_random_seeds()
     hyperparams = load_hyperparameters('config.yaml')
-    k_splits = hyperparams.get('K_FOLDS', 5)
-    print(k_splits)
-    with wandb.init(project=hyperparams["PROJECT"], config=config):
-        config_sweep = wandb.config
 
-        for fold in range(k_splits):
-            print(f"\nTreinando Fold {fold+1}/{k_splits}")
+    wandb.init(config=config)
+    config = wandb.config
 
-            # Inicializa o DataModule com os dados para o fold atual
-            data_module = CustomImageCSVModule_kf(
-                train_dir=hyperparams['TRAIN_DIR'],
-                test_dir=hyperparams['TEST_DIR'],
-                shape=hyperparams['SHAPE'],
-                batch_size=hyperparams['BATCH_SIZE'],
-                num_workers=hyperparams['NUM_WORKERS'],
-                n_splits=k_splits
-            )
-            data_module.setup(stage='fit', fold_idx=fold)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-            # Inicializa o modelo
-            model = CustomEnsembleModel(
-                tmodel=hyperparams["TMODEL"],
-                name_dataset=hyperparams["NAME_DATASET"],
-                shape=hyperparams["SHAPE"],
-                epochs=hyperparams['MAX_EPOCHS'],
-                learning_rate=float(config_sweep.learning_rate),
-                features_dim=hyperparams["FEATURES_DIM"],
-                scale_factor=hyperparams['SCALE_FACTOR'],
-                drop_path_rate=config_sweep.drop_path_rate,
-                num_classes=hyperparams['NUM_CLASSES'],
-                label_smoothing=config_sweep.label_smoothing,
-                optimizer_momentum=(config_sweep.optimizer_momentum, 0.999),
-                weight_decay=float(config_sweep.weight_decay),
-                layer_scale=config_sweep.layer_scale,
-                mlp_vector_model_scale=config_sweep.mlp_vector_model_scale
-            )
+    dataset = CustomDataset_kf(hyperparams['DATA_PATH'])
+    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-            # Caminho para salvar o checkpoint
-            checkpoint_path = f"{hyperparams['CHECKPOINT_PATH']}/fold_{fold+1}.ckpt"
+    fold_accuracies = []  # Lista para armazenar a acurácia de cada fold
 
-            # Definição dos callbacks
-            callbacks = [
-                TQDMProgressBar(leave=True),
-                SaveBestOrLastModelCallback(checkpoint_path),
-                EarlyStoppingAtSpecificEpoch(patience=4, threshold=1e-3, monitor="val_loss"),
-                EarlyStopCallback(metric_name="val_loss", threshold=0.5, target_epoch=3)
-            ]
+    for fold, (train_idx, val_idx) in enumerate(skf.split(dataset.filepaths, dataset.labels)):
 
-            # Inicializa o logger do WandB
-            wandb_logger = WandbLogger(project=hyperparams["PROJECT"], name=f"Fold_{fold+1}")
+        train_subset = torch.utils.data.Subset(dataset, train_idx)
+        val_subset = torch.utils.data.Subset(dataset, val_idx)
 
-            # Configuração do treinador
-            trainer = pl.Trainer(
-                logger=wandb_logger,
-                log_every_n_steps=10,
-                accelerator=hyperparams['ACCELERATOR'],
-                devices=hyperparams['DEVICES'],
-                precision=hyperparams['PRECISION'],
-                max_epochs=hyperparams['MAX_EPOCHS'],
-                callbacks=callbacks
-            )
+        train_loader = DataLoader(train_subset, batch_size=config.batch_size, shuffle=True)
+        val_loader = DataLoader(val_subset, batch_size=config.batch_size, shuffle=False)
 
-            # Treinamento
-            trainer.fit(model, data_module)
+        model = CustomEnsembleModel(
+            num_classes=hyperparams['NUM_CLASSES'],
+            drop_path_rate=config.drop_path_rate,
+            learning_rate=config.learning_rate
+        ).to(device)
 
-            # Testa o modelo salvo
-            best_model = CustomEnsembleModel.load_from_checkpoint(checkpoint_path)
-            trainer.test(best_model, data_module)
+        criterion = torch.nn.CrossEntropyLoss()
+        optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
+
+        for epoch in range(config.epochs):
+            train_epoch(model, train_loader, criterion, optimizer, device)
+            val_accuracy = evaluate(model, val_loader, device)
+
+            wandb.log({f"fold_{fold}_val_accuracy": val_accuracy, "epoch": epoch})
+
+        fold_accuracies.append(val_accuracy)  # Armazena a acurácia final do fold
+
+    # Calcula a média da acurácia dos folds
+    mean_accuracy = np.mean(fold_accuracies)
+    wandb.log({"mean_val_accuracy": mean_accuracy})  # Registra a média no WandB
+
+    wandb.finish()
+
 
 if __name__ == "__main__":
     set_random_seeds()  # Inicializa as sementes
     hyperparams = load_hyperparameters('config.yaml')
 
-    # Configuração do sweep
     sweep_config = {
         'method': 'random',
-        'metric': {'name': 'val_loss', 'goal': 'minimize'},
+        'metric': {'name': 'val_accuracy', 'goal': 'maximize'},
         'parameters': {
-            'learning_rate': {'min': 1e-5, 'max': 2e-4, 'distribution': 'uniform'},
-            'weight_decay': {'min': 1e-7, 'max': 1e-6, 'distribution': 'uniform'},
-            'optimizer_momentum': {'min': 0.92, 'max': 0.99, 'distribution': 'uniform'},
-            'mlp_vector_model_scale': {'min': 0.8, 'max': 1.3, 'distribution': 'uniform'},
-            'layer_scale': {'min': 0.5, 'max': 1.5, 'distribution': 'uniform'},
-            'drop_path_rate': {'min': 0.0, 'max': 0.5, 'distribution': 'uniform'},
-            'label_smoothing': {'min': 0.0, 'max': 0.2, 'distribution': 'uniform'}
-        },
-        'method': 'random',
-        'metric': {'name': 'val_loss', 'goal': 'minimize'}
+            'learning_rate': {'values': [1e-4, 5e-5, 1e-5]},
+            'batch_size': {'values': [16, 32]},
+            'epochs': {'value': 50},
+            'weight_decay': {'values': [1e-5, 1e-6]},
+        }
     }
 
-    sweep_id = wandb.sweep(sweep_config, project=hyperparams["PROJECT"])
-    wandb.agent(sweep_id, function=train_model_kf, count=200)
+    sweep_id = wandb.sweep(sweep_config, project=hyperparams['PROJECT'])
+    wandb.agent(sweep_id, train_cv, count=50)
+
     wandb.finish()
