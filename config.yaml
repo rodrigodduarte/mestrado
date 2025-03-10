@@ -3,8 +3,6 @@ TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/train"
 TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/test"
 PROJECT: "flavia_ensemble_kf"
 CHECKPOINT_PATH: "checkpoints_config"
-BEST_CHECKPOINT_PATH: "/home/rodrigoduarte/Documentos/projeto/checkpoints_config/epochepoch=99-val_lossval_loss=0.67.ckpt"
-NAME_DATASET: "flavia"
 
 # Hiperparâmetros relacionados à configuração do modelo
 TMODEL: "swint_t"
@@ -12,10 +10,10 @@ SHAPE: [224, 224]
 FEATURES_DIM: 648
 HIDDEN_LAYERS: 2
 HIDDEN_UNITS: 1296
-MAX_EPOCHS: 20
+MAX_EPOCHS: 20  # Número de épocas por fold
 NUM_CLASSES: 44
-BATCH_SIZE: 128  # Valor padrão (será sobrescrito pelo sweep)
-LEARNING_RATE: 0.000097993  # Valor padrão (será sobrescrito pelo sweep)
+BATCH_SIZE: 128  
+LEARNING_RATE: 0.000097993  
 SCALE_FACTOR: 0.8
 DROP_PATH_RATE: 0.40165
 LABEL_SMOOTHING: 0.18968
@@ -23,8 +21,7 @@ OPTIMIZER_MOMENTUM: [0.9, 0.88456]
 WEIGHT_DECAY: 2.1733e-7
 LAYER_SCALE: 0.5816
 MLP_VECTOR_MODEL_SCALE: 0.93104
-K_FOLDS: 5
-
+K_FOLDS: 5  # Número de folds na validação cruzada
 
 # Configurações de hardware e execução
 NUM_WORKERS: 4

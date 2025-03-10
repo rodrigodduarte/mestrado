@@ -52,22 +52,27 @@ def train_model():
         )
         data_module.setup(stage='fit')
 
-        model = CustomEnsembleModel(
-            tmodel=hyperparams["TMODEL"],
-            name_dataset=hyperparams["NAME_DATASET"],
-            shape=hyperparams["SHAPE"],
-            epochs=hyperparams['MAX_EPOCHS'],
-            learning_rate=float(hyperparams["LEARNING_RATE"]),
-            features_dim=hyperparams["FEATURES_DIM"],
-            scale_factor=hyperparams['SCALE_FACTOR'],
-            drop_path_rate=hyperparams['DROP_PATH_RATE'],
-            num_classes=hyperparams['NUM_CLASSES'],
-            label_smoothing=hyperparams['LABEL_SMOOTHING'],
-            optimizer_momentum=(hyperparams['OPTIMIZER_MOMENTUM'][0], hyperparams['OPTIMIZER_MOMENTUM'][1]),
-            weight_decay=float(hyperparams['WEIGHT_DECAY']),
-            layer_scale=hyperparams['LAYER_SCALE'],
-            mlp_vector_model_scale=hyperparams['MLP_VECTOR_MODEL_SCALE']
-        )
+        # Se houver um modelo salvo, carregamos os melhores pesos
+        if best_checkpoint_path:
+            print(f"Carregando pesos do melhor modelo encontrado até agora: {best_checkpoint_path}")
+            model = CustomEnsembleModel.load_from_checkpoint(best_checkpoint_path)
+        else:
+            model = CustomEnsembleModel(
+                tmodel=hyperparams["TMODEL"],
+                name_dataset=hyperparams["NAME_DATASET"],
+                shape=hyperparams["SHAPE"],
+                epochs=hyperparams['MAX_EPOCHS'],
+                learning_rate=float(hyperparams["LEARNING_RATE"]),
+                features_dim=hyperparams["FEATURES_DIM"],
+                scale_factor=hyperparams['SCALE_FACTOR'],
+                drop_path_rate=hyperparams['DROP_PATH_RATE'],
+                num_classes=hyperparams['NUM_CLASSES'],
+                label_smoothing=hyperparams['LABEL_SMOOTHING'],
+                optimizer_momentum=(hyperparams['OPTIMIZER_MOMENTUM'][0], hyperparams['OPTIMIZER_MOMENTUM'][1]),
+                weight_decay=float(hyperparams['WEIGHT_DECAY']),
+                layer_scale=hyperparams['LAYER_SCALE'],
+                mlp_vector_model_scale=hyperparams['MLP_VECTOR_MODEL_SCALE']
+            )
 
         checkpoint_path = f"{hyperparams['CHECKPOINT_PATH']}/fold_{fold+1}.ckpt"
         callbacks = [
@@ -92,12 +97,12 @@ def train_model():
         trainer.fit(model, data_module)
         
         # Carregar o modelo treinado e verificar a melhor val_loss
-        best_model = CustomEnsembleModel.load_from_checkpoint(checkpoint_path)
         val_loss = trainer.callback_metrics.get("val_loss", float('inf'))
         
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             best_checkpoint_path = checkpoint_path
+            print(f"Novo melhor modelo encontrado! Salvo em: {best_checkpoint_path}")
 
     print(f"\nTreinamento finalizado. Melhor modelo salvo em: {best_checkpoint_path} com val_loss: {best_val_loss:.4f}")
 

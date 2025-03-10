@@ -2,9 +2,7 @@
 TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/train"
 TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/test"
 PROJECT: "flavia_ensemble_kf"
-CHECKPOINT_PATH: "checkpoints_config"
-BEST_CHECKPOINT_PATH: "/home/rodrigoduarte/Documentos/projeto/checkpoints_config/epochepoch=99-val_lossval_loss=0.67.ckpt"
-NAME_DATASET: "flavia"
+CHECKPOINT_PATH: "checkpoints_config2"
 
 # Hiperparâmetros relacionados à configuração do modelo
 TMODEL: "convnext_t"
