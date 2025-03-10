@@ -48,14 +48,16 @@ def train_model():
             batch_size=hyperparams['BATCH_SIZE'],
             num_workers=hyperparams['NUM_WORKERS'],
             n_splits=k_splits,
-            fold_idx=fold  # Passando o índice do fold para a classe
+            fold_idx=fold
         )
         data_module.setup(stage='fit')
 
-        # Se houver um modelo salvo, carregamos os melhores pesos
-        if best_checkpoint_path:
-            print(f"Carregando pesos do melhor modelo encontrado até agora: {best_checkpoint_path}")
-            model = CustomEnsembleModel.load_from_checkpoint(best_checkpoint_path)
+        # Determinar o checkpoint do fold anterior
+        previous_checkpoint = f"{hyperparams['CHECKPOINT_PATH']}/fold_{fold}.ckpt" if fold > 0 else None
+        
+        if previous_checkpoint and os.path.exists(previous_checkpoint):
+            print(f"Carregando modelo do fold anterior: {previous_checkpoint}")
+            model = CustomEnsembleModel.load_from_checkpoint(previous_checkpoint)
         else:
             model = CustomEnsembleModel(
                 tmodel=hyperparams["TMODEL"],
@@ -78,8 +80,8 @@ def train_model():
         callbacks = [
             TQDMProgressBar(leave=True),
             SaveBestOrLastModelCallback(checkpoint_path),
-            # EarlyStoppingAtSpecificEpoch(patience=4, threshold=1e-3, monitor="val_loss"),
-            # EarlyStopCallback(metric_name="val_loss", threshold=0.5, target_epoch=3)
+            EarlyStoppingAtSpecificEpoch(patience=4, threshold=1e-3, monitor="val_loss"),
+            EarlyStopCallback(metric_name="val_loss", threshold=0.5, target_epoch=3)
         ]
 
         wandb_logger = WandbLogger(project=hyperparams["PROJECT"], name=f"Fold_{fold+1}")
@@ -96,17 +98,11 @@ def train_model():
 
         trainer.fit(model, data_module)
         
-        # Carregar o modelo treinado e verificar a melhor val_loss
-        val_loss = trainer.callback_metrics.get("val_loss", float('inf'))
-        
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            best_checkpoint_path = checkpoint_path
-            print(f"Novo melhor modelo encontrado! Salvo em: {best_checkpoint_path}")
+        best_checkpoint_path = checkpoint_path
+        print(f"Modelo salvo para o próximo fold: {best_checkpoint_path}")
 
-    print(f"\nTreinamento finalizado. Melhor modelo salvo em: {best_checkpoint_path} com val_loss: {best_val_loss:.4f}")
+    print(f"\nTreinamento finalizado. Melhor modelo salvo em: {best_checkpoint_path}")
 
-    # Teste no melhor modelo encontrado
     if best_checkpoint_path:
         print("\nIniciando teste final no melhor modelo...")
         best_model = CustomEnsembleModel.load_from_checkpoint(best_checkpoint_path)
