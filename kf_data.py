@@ -50,12 +50,16 @@ class CustomImageCSVModule_kf(pl.LightningDataModule):
             
             self.train_ds = torch.utils.data.Subset(full_dataset, train_indices)
             self.val_ds = torch.utils.data.Subset(full_dataset, val_indices)
+            
+            # Log dos índices para monitoramento
+            print(f"[Fold {self.fold_idx}] {len(train_indices)} exemplos para treino, {len(val_indices)} para validação.")
 
         if stage == "test" or stage is None:
             self.test_ds = CustomImageWithFeaturesDataset(
                 data_dir=self.test_dir,
                 transform=self.image_transform
             )
+            print(f"[Test] {len(self.test_ds)} exemplos para teste.")
 
     def train_dataloader(self):
         return DataLoader(self.train_ds, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)
