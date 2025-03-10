@@ -3,6 +3,7 @@ TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/train"
 TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/test"
 PROJECT: "flavia_ensemble_kf"
 CHECKPOINT_PATH: "checkpoints_config"
+NAME_DATASET: "flavia"
 
 # Hiperparâmetros relacionados à configuração do modelo
 TMODEL: "swint_t"
