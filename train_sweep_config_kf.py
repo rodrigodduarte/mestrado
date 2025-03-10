@@ -68,49 +68,60 @@ def evaluate(model, dataloader, device):
 
 # Função principal de treinamento com validação cruzada
 def train_cv(config=None):
-    set_random_seeds()
     hyperparams = load_hyperparameters('config.yaml')
 
-    wandb.init(config=config)
-    config = wandb.config
+        # Inicializar o W&B e acessar os parâmetros do sweep
+    with wandb.init(project=hyperparams["PROJECT"], config=config):
+        config_sweep = wandb.config
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    dataset = CustomDataset_kf(hyperparams['DATA_PATH'])
-    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+        dataset = CustomDataset_kf(hyperparams['DATA_PATH'])
+        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-    fold_accuracies = []  # Lista para armazenar a acurácia de cada fold
+        fold_accuracies = []  # Lista para armazenar a acurácia de cada fold
 
-    for fold, (train_idx, val_idx) in enumerate(skf.split(dataset.filepaths, dataset.labels)):
+        for fold, (train_idx, val_idx) in enumerate(skf.split(dataset.filepaths, dataset.labels)):
 
-        train_subset = torch.utils.data.Subset(dataset, train_idx)
-        val_subset = torch.utils.data.Subset(dataset, val_idx)
+            train_subset = torch.utils.data.Subset(dataset, train_idx)
+            val_subset = torch.utils.data.Subset(dataset, val_idx)
 
-        train_loader = DataLoader(train_subset, batch_size=config.batch_size, shuffle=True)
-        val_loader = DataLoader(val_subset, batch_size=config.batch_size, shuffle=False)
+            train_loader = DataLoader(train_subset, batch_size=config.batch_size, shuffle=True)
+            val_loader = DataLoader(val_subset, batch_size=config.batch_size, shuffle=False)
 
-        model = CustomEnsembleModel(
-            num_classes=hyperparams['NUM_CLASSES'],
-            drop_path_rate=config.drop_path_rate,
-            learning_rate=config.learning_rate
-        ).to(device)
+            model = CustomEnsembleModel(
+                tmodel=hyperparams["TMODEL"],
+                name_dataset=hyperparams["NAME_DATASET"],
+                shape=hyperparams["SHAPE"],
+                epochs=hyperparams['MAX_EPOCHS'],
+                learning_rate=float(config_sweep.learning_rate),
+                features_dim=hyperparams["FEATURES_DIM"],
+                scale_factor=hyperparams['SCALE_FACTOR'],
+                drop_path_rate=config_sweep.drop_path_rate,
+                num_classes=hyperparams['NUM_CLASSES'],
+                label_smoothing=config_sweep.label_smoothing,
+                optimizer_momentum=(config_sweep.optimizer_momentum, 0.999),
+                weight_decay=float(config_sweep.weight_decay),
+                layer_scale=config_sweep.layer_scale,
+                mlp_vector_model_scale=config_sweep.mlp_vector_model_scale
+            )
 
-        criterion = torch.nn.CrossEntropyLoss()
-        optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
+            criterion = torch.nn.CrossEntropyLoss()
+            optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
 
-        for epoch in range(config.epochs):
-            train_epoch(model, train_loader, criterion, optimizer, device)
-            val_accuracy = evaluate(model, val_loader, device)
+            for epoch in range(config.epochs):
+                train_epoch(model, train_loader, criterion, optimizer, device)
+                val_accuracy = evaluate(model, val_loader, device)
 
-            wandb.log({f"fold_{fold}_val_accuracy": val_accuracy, "epoch": epoch})
+                wandb.log({f"fold_{fold}_val_accuracy": val_accuracy, "epoch": epoch})
 
-        fold_accuracies.append(val_accuracy)  # Armazena a acurácia final do fold
+            fold_accuracies.append(val_accuracy)  # Armazena a acurácia final do fold
 
-    # Calcula a média da acurácia dos folds
-    mean_accuracy = np.mean(fold_accuracies)
-    wandb.log({"mean_val_accuracy": mean_accuracy})  # Registra a média no WandB
+        # Calcula a média da acurácia dos folds
+        mean_accuracy = np.mean(fold_accuracies)
+        wandb.log({"mean_val_accuracy": mean_accuracy})  # Registra a média no WandB
 
-    wandb.finish()
+        wandb.finish()
 
 
 if __name__ == "__main__":
