@@ -30,88 +30,71 @@ def set_random_seeds():
     torch.cuda.manual_seed_all(42)
 
 # Função principal para treinamento com validação cruzada
-def train_model(config=None):
+def train_model():
     hyperparams = load_hyperparameters('config.yaml')
     k_splits = hyperparams['K_FOLDS']
 
-    with wandb.init(project=hyperparams["PROJECT"], config=config):
-        config_sweep = wandb.config
+    wandb.init(project=hyperparams["PROJECT"])
 
-        for fold in range(k_splits):
-            print(f"\nTreinando Fold {fold+1}/{k_splits}")
+    for fold in range(k_splits):
+        print(f"\nTreinando Fold {fold+1}/{k_splits}")
 
-            data_module = CustomImageCSVModule_kf(
-                train_dir=hyperparams['TRAIN_DIR'],
-                test_dir=hyperparams['TEST_DIR'],
-                shape=hyperparams['SHAPE'],
-                batch_size=hyperparams['BATCH_SIZE'],
-                num_workers=hyperparams['NUM_WORKERS'],
-                n_splits=k_splits,
-                fold_idx=fold  # Passando o índice do fold para a classe
-            )
-            data_module.setup(stage='fit')
+        data_module = CustomImageCSVModule_kf(
+            train_dir=hyperparams['TRAIN_DIR'],
+            test_dir=hyperparams['TEST_DIR'],
+            shape=hyperparams['SHAPE'],
+            batch_size=hyperparams['BATCH_SIZE'],
+            num_workers=hyperparams['NUM_WORKERS'],
+            n_splits=k_splits,
+            fold_idx=fold  # Passando o índice do fold para a classe
+        )
+        data_module.setup(stage='fit')
 
-            model = CustomEnsembleModel(
-                tmodel=hyperparams["TMODEL"],
-                name_dataset=hyperparams["NAME_DATASET"],
-                shape=hyperparams["SHAPE"],
-                epochs=hyperparams['MAX_EPOCHS'],
-                learning_rate=float(config_sweep.learning_rate),
-                features_dim=hyperparams["FEATURES_DIM"],
-                scale_factor=hyperparams['SCALE_FACTOR'],
-                drop_path_rate=config_sweep.drop_path_rate,
-                num_classes=hyperparams['NUM_CLASSES'],
-                label_smoothing=config_sweep.label_smoothing,
-                optimizer_momentum=(config_sweep.optimizer_momentum, 0.999),
-                weight_decay=float(config_sweep.weight_decay),
-                layer_scale=config_sweep.layer_scale,
-                mlp_vector_model_scale=config_sweep.mlp_vector_model_scale
-            )
+        model = CustomEnsembleModel(
+            tmodel=hyperparams["TMODEL"],
+            name_dataset=hyperparams["NAME_DATASET"],
+            shape=hyperparams["SHAPE"],
+            epochs=hyperparams['MAX_EPOCHS'],
+            learning_rate=float(hyperparams["LEARNING_RATE"]),
+            features_dim=hyperparams["FEATURES_DIM"],
+            scale_factor=hyperparams['SCALE_FACTOR'],
+            drop_path_rate=hyperparams['DROP_PATH_RATE'],
+            num_classes=hyperparams['NUM_CLASSES'],
+            label_smoothing=hyperparams['LABEL_SMOOTHING'],
+            optimizer_momentum=(hyperparams['OPTIMIZER_MOMENTUM'][0], hyperparams['OPTIMIZER_MOMENTUM'][1]),
+            weight_decay=float(hyperparams['WEIGHT_DECAY']),
+            layer_scale=hyperparams['LAYER_SCALE'],
+            mlp_vector_model_scale=hyperparams['MLP_VECTOR_MODEL_SCALE']
+        )
 
-            checkpoint_path = f"{hyperparams['CHECKPOINT_PATH']}/fold_{fold+1}.ckpt"
-            callbacks = [
-                TQDMProgressBar(leave=True),
-                SaveBestOrLastModelCallback(checkpoint_path),
-                EarlyStoppingAtSpecificEpoch(patience=4, threshold=1e-3, monitor="val_loss"),
-                EarlyStopCallback(metric_name="val_loss", threshold=0.5, target_epoch=3)
-            ]
+        checkpoint_path = f"{hyperparams['CHECKPOINT_PATH']}/fold_{fold+1}.ckpt"
+        callbacks = [
+            TQDMProgressBar(leave=True),
+            SaveBestOrLastModelCallback(checkpoint_path),
+            EarlyStoppingAtSpecificEpoch(patience=4, threshold=1e-3, monitor="val_loss"),
+            EarlyStopCallback(metric_name="val_loss", threshold=0.5, target_epoch=3)
+        ]
 
-            wandb_logger = WandbLogger(project=hyperparams["PROJECT"], name=f"Fold_{fold+1}")
+        wandb_logger = WandbLogger(project=hyperparams["PROJECT"], name=f"Fold_{fold+1}")
 
-            trainer = pl.Trainer(
-                logger=wandb_logger,
-                log_every_n_steps=10,
-                accelerator=hyperparams['ACCELERATOR'],
-                devices=hyperparams['DEVICES'],
-                precision=hyperparams['PRECISION'],
-                max_epochs=hyperparams['MAX_EPOCHS'],
-                callbacks=callbacks
-            )
+        trainer = pl.Trainer(
+            logger=wandb_logger,
+            log_every_n_steps=10,
+            accelerator=hyperparams['ACCELERATOR'],
+            devices=hyperparams['DEVICES'],
+            precision=hyperparams['PRECISION'],
+            max_epochs=hyperparams['MAX_EPOCHS'],
+            callbacks=callbacks
+        )
 
-            trainer.fit(model, data_module)
-            best_model = CustomEnsembleModel.load_from_checkpoint(checkpoint_path)
+        trainer.fit(model, data_module)
+        best_model = CustomEnsembleModel.load_from_checkpoint(checkpoint_path)
 
-            data_module.setup(stage='test')
-            trainer.test(best_model, data_module)
+        data_module.setup(stage='test')
+        trainer.test(best_model, data_module)
+
+    wandb.finish()
 
 if __name__ == "__main__":
     set_random_seeds()
-    hyperparams = load_hyperparameters('config.yaml')
-
-    sweep_config = {
-        'method': 'random',
-        'metric': {'name': 'val_loss', 'goal': 'minimize'},
-        'parameters': {
-            'learning_rate': {'min': 1e-5, 'max': 2e-4, 'distribution': 'uniform'},
-            'weight_decay': {'min': 1e-7, 'max': 1e-6, 'distribution': 'uniform'},
-            'optimizer_momentum': {'min': 0.92, 'max': 0.99, 'distribution': 'uniform'},
-            'mlp_vector_model_scale': {'min': 0.8, 'max': 1.3, 'distribution': 'uniform'},
-            'layer_scale': {'min': 0.5, 'max': 1.5, 'distribution': 'uniform'},
-            'drop_path_rate': {'min': 0.0, 'max': 0.5, 'distribution': 'uniform'},
-            'label_smoothing': {'min': 0.0, 'max': 0.2, 'distribution': 'uniform'}
-        }
-    }
-
-    sweep_id = wandb.sweep(sweep_config, project=hyperparams["PROJECT"])
-    wandb.agent(sweep_id, function=train_model, count=200)
-    wandb.finish()
+    train_model()
