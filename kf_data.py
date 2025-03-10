@@ -16,7 +16,7 @@ class CustomImageCSVModule_kf(pl.LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.n_splits = n_splits
-        self.fold_idx = fold_idx  # Novo parâmetro para indicar o fold atual
+        self.fold_idx = fold_idx  # Parâmetro para indicar o fold atual
 
         self.image_transform = v2.Compose([
             v2.ToImage(),
@@ -37,7 +37,6 @@ class CustomImageCSVModule_kf(pl.LightningDataModule):
     def setup(self, stage=None):
         """Configura os datasets de treino, validação e teste."""
         if stage == "fit" or stage is None:
-            # Carrega o dataset completo de treino e aplica validação cruzada
             full_dataset = CustomImageWithFeaturesDataset(
                 data_dir=self.train_dir,
                 transform=self.image_transform
@@ -45,41 +44,24 @@ class CustomImageCSVModule_kf(pl.LightningDataModule):
             
             indices = list(range(len(full_dataset)))
             splits = list(self.kf.split(indices))
-            train_indices, val_indices = splits[self.fold_idx]  # Obtém os índices do fold específico
+            if self.fold_idx >= len(splits):
+                raise ValueError(f"Fold index {self.fold_idx} fora do intervalo permitido. Total de folds: {len(splits)}")
+            train_indices, val_indices = splits[self.fold_idx]
             
             self.train_ds = torch.utils.data.Subset(full_dataset, train_indices)
             self.val_ds = torch.utils.data.Subset(full_dataset, val_indices)
 
         if stage == "test" or stage is None:
-            # Carrega o dataset de teste
             self.test_ds = CustomImageWithFeaturesDataset(
                 data_dir=self.test_dir,
                 transform=self.image_transform
             )
 
     def train_dataloader(self):
-        """Retorna o DataLoader de treino."""
-        return DataLoader(
-            self.train_ds,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            shuffle=True
-        )
+        return DataLoader(self.train_ds, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)
     
     def val_dataloader(self):
-        """Retorna o DataLoader de validação."""
-        return DataLoader(
-            self.val_ds,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            shuffle=False
-        )
+        return DataLoader(self.val_ds, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
     
     def test_dataloader(self):
-        """Retorna o DataLoader de teste."""
-        return DataLoader(
-            self.test_ds,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            shuffle=False
-        )
+        return DataLoader(self.test_ds, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)

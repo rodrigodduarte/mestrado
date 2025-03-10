@@ -1,117 +1,71 @@
-import os
-import torch
 import pytorch_lightning as pl
-import numpy as np
-import wandb
-import yaml
+from torch.utils.data import DataLoader, random_split
+from torchvision.transforms import v2
+import PIL
+import torch
 import random
-from pytorch_lightning.callbacks import TQDMProgressBar
-from pytorch_lightning.loggers import WandbLogger
-from model import CustomEnsembleModel
-from dataset import CustomImageCSVModule_kf
-from callbacks import (
-    EarlyStoppingAtSpecificEpoch,
-    SaveBestOrLastModelCallback,
-    EarlyStopCallback
-)
+from sklearn.model_selection import KFold
+from dataset import CustomImageWithFeaturesDataset
 
-# Carregar hiperparâmetros do arquivo config.yaml
-def load_hyperparameters(file_path):
-    with open(file_path, 'r') as file:
-        hyperparams = yaml.safe_load(file)
-    return hyperparams
+class CustomImageCSVModule_kf(pl.LightningDataModule):
+    def __init__(self, train_dir, test_dir, shape, batch_size, num_workers, n_splits=5, fold_idx=0):
+        super().__init__()
+        self.train_dir = train_dir
+        self.test_dir = test_dir
+        self.shape = shape
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.n_splits = n_splits
+        self.fold_idx = fold_idx  # Parâmetro para indicar o fold atual
 
-# Configurar sementes para garantir reprodutibilidade
-def set_random_seeds():
-    torch.backends.cudnn.deterministic = True
-    random.seed(42)
-    np.random.seed(42)
-    torch.manual_seed(42)
-    torch.cuda.manual_seed_all(42)
+        self.image_transform = v2.Compose([
+            v2.ToImage(),
+            v2.Resize(self.shape, interpolation=PIL.Image.BILINEAR, antialias=False),
+            v2.ToDtype(torch.uint8, scale=True),
 
-# Função principal para treinamento com validação cruzada
-def train_model(config=None):
-    hyperparams = load_hyperparameters('config.yaml')
-    k_splits = hyperparams['K_FOLDS']
+            v2.RandomHorizontalFlip(),
+            v2.RandomVerticalFlip(p=0.1),
+            v2.RandomErasing(p=0.25),
+            v2.RandAugment(num_ops=9, magnitude=5),
 
-    with wandb.init(project=hyperparams["PROJECT"], config=config):
-        config_sweep = wandb.config
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
 
-        for fold in range(k_splits):
-            print(f"\nTreinando Fold {fold+1}/{k_splits}")
+        self.kf = KFold(n_splits=self.n_splits, shuffle=True, random_state=42)  # Fixando a seed para garantir reprodutibilidade
 
-            data_module = CustomImageCSVModule_kf(
-                train_dir=hyperparams['TRAIN_DIR'],
-                test_dir=hyperparams['TEST_DIR'],
-                shape=hyperparams['SHAPE'],
-                batch_size=hyperparams['BATCH_SIZE'],
-                num_workers=hyperparams['NUM_WORKERS'],
-                n_splits=k_splits,
-                fold_idx=fold  # Passando o índice do fold para a classe
+    def setup(self, stage=None):
+        """Configura os datasets de treino, validação e teste."""
+        if stage == "fit" or stage is None:
+            full_dataset = CustomImageWithFeaturesDataset(
+                data_dir=self.train_dir,
+                transform=self.image_transform
             )
-            data_module.setup(stage='fit')
+            
+            indices = list(range(len(full_dataset)))
+            splits = list(self.kf.split(indices))
+            if self.fold_idx >= len(splits):
+                raise ValueError(f"Fold index {self.fold_idx} fora do intervalo permitido. Total de folds: {len(splits)}")
+            train_indices, val_indices = splits[self.fold_idx]
+            
+            self.train_ds = torch.utils.data.Subset(full_dataset, train_indices)
+            self.val_ds = torch.utils.data.Subset(full_dataset, val_indices)
+            
+            # Log dos índices para monitoramento
+            print(f"[Fold {self.fold_idx}] {len(train_indices)} exemplos para treino, {len(val_indices)} para validação.")
 
-            model = CustomEnsembleModel(
-                tmodel=hyperparams["TMODEL"],
-                name_dataset=hyperparams["NAME_DATASET"],
-                shape=hyperparams["SHAPE"],
-                epochs=hyperparams['MAX_EPOCHS'],
-                learning_rate=float(config_sweep.learning_rate),
-                features_dim=hyperparams["FEATURES_DIM"],
-                scale_factor=hyperparams['SCALE_FACTOR'],
-                drop_path_rate=config_sweep.drop_path_rate,
-                num_classes=hyperparams['NUM_CLASSES'],
-                label_smoothing=config_sweep.label_smoothing,
-                optimizer_momentum=(config_sweep.optimizer_momentum, 0.999),
-                weight_decay=float(config_sweep.weight_decay),
-                layer_scale=config_sweep.layer_scale,
-                mlp_vector_model_scale=config_sweep.mlp_vector_model_scale
+        if stage == "test" or stage is None:
+            self.test_ds = CustomImageWithFeaturesDataset(
+                data_dir=self.test_dir,
+                transform=self.image_transform
             )
+            print(f"[Test] {len(self.test_ds)} exemplos para teste.")
 
-            checkpoint_path = f"{hyperparams['CHECKPOINT_PATH']}/fold_{fold+1}.ckpt"
-            callbacks = [
-                TQDMProgressBar(leave=True),
-                SaveBestOrLastModelCallback(checkpoint_path),
-                EarlyStoppingAtSpecificEpoch(patience=4, threshold=1e-3, monitor="val_loss"),
-                EarlyStopCallback(metric_name="val_loss", threshold=0.5, target_epoch=3)
-            ]
-
-            wandb_logger = WandbLogger(project=hyperparams["PROJECT"], name=f"Fold_{fold+1}")
-
-            trainer = pl.Trainer(
-                logger=wandb_logger,
-                log_every_n_steps=10,
-                accelerator=hyperparams['ACCELERATOR'],
-                devices=hyperparams['DEVICES'],
-                precision=hyperparams['PRECISION'],
-                max_epochs=hyperparams['MAX_EPOCHS'],
-                callbacks=callbacks
-            )
-
-            trainer.fit(model, data_module)
-            best_model = CustomEnsembleModel.load_from_checkpoint(checkpoint_path)
-
-            data_module.setup(stage='test')
-            trainer.test(best_model, data_module)
-
-if __name__ == "__main__":
-    set_random_seeds()
-    hyperparams = load_hyperparameters('config.yaml')
-
-    sweep_config = {
-        'method': 'random',
-        'metric': {'name': 'val_loss', 'goal': 'minimize'},
-        'parameters': {
-            'learning_rate': {'min': 1e-5, 'max': 2e-4, 'distribution': 'uniform'},
-            'weight_decay': {'min': 1e-7, 'max': 1e-6, 'distribution': 'uniform'},
-            'optimizer_momentum': {'min': 0.92, 'max': 0.99, 'distribution': 'uniform'},
-            'mlp_vector_model_scale': {'min': 0.8, 'max': 1.3, 'distribution': 'uniform'},
-            'layer_scale': {'min': 0.5, 'max': 1.5, 'distribution': 'uniform'},
-            'drop_path_rate': {'min': 0.0, 'max': 0.5, 'distribution': 'uniform'},
-            'label_smoothing': {'min': 0.0, 'max': 0.2, 'distribution': 'uniform'}
-        }
-    }
-
-    sweep_id = wandb.sweep(sweep_config, project=hyperparams["PROJECT"])
-    wandb.agent(sweep_id, function=train_model, count=200)
-    wandb.finish()
+    def train_dataloader(self):
+        return DataLoader(self.train_ds, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)
+    
+    def val_dataloader(self):
+        return DataLoader(self.val_ds, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
+    
+    def test_dataloader(self):
+        return DataLoader(self.test_ds, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
