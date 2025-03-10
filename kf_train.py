@@ -73,7 +73,7 @@ def train_model():
         callbacks = [
             TQDMProgressBar(leave=True),
             SaveBestOrLastModelCallback(checkpoint_path),
-            EarlyStoppingAtSpecificEpoch(patience=4, threshold=1e-3, monitor="val_loss"),
+            # EarlyStoppingAtSpecificEpoch(patience=4, threshold=1e-3, monitor="val_loss"),
             # EarlyStopCallback(metric_name="val_loss", threshold=0.5, target_epoch=3)
         ]
 
