@@ -33,7 +33,9 @@ def set_random_seeds():
 def train_model():
     hyperparams = load_hyperparameters('config.yaml')
     k_splits = hyperparams['K_FOLDS']
-
+    best_val_loss = float('inf')
+    best_checkpoint_path = None
+    
     wandb.init(project=hyperparams["PROJECT"])
 
     for fold in range(k_splits):
@@ -72,7 +74,7 @@ def train_model():
             TQDMProgressBar(leave=True),
             SaveBestOrLastModelCallback(checkpoint_path),
             EarlyStoppingAtSpecificEpoch(patience=4, threshold=1e-3, monitor="val_loss"),
-            EarlyStopCallback(metric_name="val_loss", threshold=0.5, target_epoch=3)
+            # EarlyStopCallback(metric_name="val_loss", threshold=0.5, target_epoch=3)
         ]
 
         wandb_logger = WandbLogger(project=hyperparams["PROJECT"], name=f"Fold_{fold+1}")
@@ -88,8 +90,21 @@ def train_model():
         )
 
         trainer.fit(model, data_module)
+        
+        # Carregar o modelo treinado e verificar a melhor val_loss
         best_model = CustomEnsembleModel.load_from_checkpoint(checkpoint_path)
+        val_loss = trainer.callback_metrics.get("val_loss", float('inf'))
+        
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            best_checkpoint_path = checkpoint_path
 
+    print(f"\nTreinamento finalizado. Melhor modelo salvo em: {best_checkpoint_path} com val_loss: {best_val_loss:.4f}")
+
+    # Teste no melhor modelo encontrado
+    if best_checkpoint_path:
+        print("\nIniciando teste final no melhor modelo...")
+        best_model = CustomEnsembleModel.load_from_checkpoint(best_checkpoint_path)
         data_module.setup(stage='test')
         trainer.test(best_model, data_module)
 
