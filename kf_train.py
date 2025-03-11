@@ -30,14 +30,14 @@ def set_random_seeds():
     torch.cuda.manual_seed_all(42)
 
 # Função principal para treinamento com validação cruzada
-def train_model():
+def train_model(config=None):
     hyperparams = load_hyperparameters('config.yaml')
     k_splits = hyperparams['K_FOLDS']
-    best_val_loss = float('inf')
     best_checkpoint_path = None
+    epochs_per_fold = hyperparams['MAX_EPOCHS'] // k_splits  
     
-    wandb.init(project=hyperparams["PROJECT"])
-    i = 4
+    wandb.init(project=hyperparams["PROJECT"], config=config)
+    
     for fold in range(k_splits):
         print(f"\nTreinando Fold {fold+1}/{k_splits}")
 
@@ -63,7 +63,7 @@ def train_model():
                 tmodel=hyperparams["TMODEL"],
                 name_dataset=hyperparams["NAME_DATASET"],
                 shape=hyperparams["SHAPE"],
-                epochs=hyperparams['MAX_EPOCHS'],
+                epochs=epochs_per_fold,
                 learning_rate=float(hyperparams["LEARNING_RATE"]),
                 features_dim=hyperparams["FEATURES_DIM"],
                 scale_factor=hyperparams['SCALE_FACTOR'],
@@ -81,7 +81,7 @@ def train_model():
             TQDMProgressBar(leave=True),
             SaveBestOrLastModelCallback(checkpoint_path),
             EarlyStoppingAtSpecificEpoch(patience=4, threshold=1e-3, monitor="val_loss"),
-            EarlyStopCallback(metric_name="val_loss", threshold=0.7, target_epoch=i)
+            EarlyStopCallback(metric_name="val_loss", threshold=0.7, target_epoch=4)
         ]
 
         wandb_logger = WandbLogger(project=hyperparams["PROJECT"], name=f"Fold_{fold+1}")
@@ -92,7 +92,7 @@ def train_model():
             accelerator=hyperparams['ACCELERATOR'],
             devices=hyperparams['DEVICES'],
             precision=hyperparams['PRECISION'],
-            max_epochs=hyperparams['MAX_EPOCHS'],
+            max_epochs=epochs_per_fold,
             callbacks=callbacks
         )
 
@@ -100,7 +100,7 @@ def train_model():
         
         best_checkpoint_path = checkpoint_path
         print(f"Modelo salvo para o próximo fold: {best_checkpoint_path}")
-        i =- 1
+
     print(f"\nTreinamento finalizado. Melhor modelo salvo em: {best_checkpoint_path}")
 
     if best_checkpoint_path:
@@ -113,4 +113,19 @@ def train_model():
 
 if __name__ == "__main__":
     set_random_seeds()
-    train_model()
+    sweep_config = {
+        'method': 'random',
+        'metric': {'name': 'val_loss', 'goal': 'minimize'},
+        'parameters': {
+            'learning_rate': {'min': 1e-5, 'max': 2e-4, 'distribution': 'uniform'},
+            'weight_decay': {'min': 1e-7, 'max': 1e-6, 'distribution': 'uniform'},
+            'optimizer_momentum': {'min': 0.92, 'max': 0.99, 'distribution': 'uniform'},
+            'mlp_vector_model_scale': {'min': 0.8, 'max': 1.3, 'distribution': 'uniform'},
+            'layer_scale': {'min': 0.5, 'max': 1.5, 'distribution': 'uniform'},
+            'drop_path_rate': {'min': 0.0, 'max': 0.5, 'distribution': 'uniform'},
+            'label_smoothing': {'min': 0.0, 'max': 0.2, 'distribution': 'uniform'}
+        }
+    }
+    sweep_id = wandb.sweep(sweep_config, project=load_hyperparameters('config.yaml')["PROJECT"])
+    wandb.agent(sweep_id, function=train_model, count=200)
+    wandb.finish()
