@@ -112,7 +112,7 @@ def train_model(config=None):
         trainer.test(best_model, data_module)
 
         # 🔹 Salvar o modelo final com nome formatado
-        final_model_path = f"{hyperparams['PROJECT']}/{wandb.run.name}.ckpt"
+        final_model_path = f"{hyperparams['PROJECT']}/{hyperparams['TMODEL']}/{wandb.run.name}.ckpt"
         best_model.save_checkpoint(final_model_path)
         print(f"Modelo final salvo em: {final_model_path}")
 
