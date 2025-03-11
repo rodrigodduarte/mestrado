@@ -37,7 +37,7 @@ def train_model():
     best_checkpoint_path = None
     
     wandb.init(project=hyperparams["PROJECT"])
-
+    i = 4
     for fold in range(k_splits):
         print(f"\nTreinando Fold {fold+1}/{k_splits}")
 
@@ -80,8 +80,8 @@ def train_model():
         callbacks = [
             TQDMProgressBar(leave=True),
             SaveBestOrLastModelCallback(checkpoint_path),
-            # EarlyStoppingAtSpecificEpoch(patience=4, threshold=1e-3, monitor="val_loss"),
-            # EarlyStopCallback(metric_name="val_loss", threshold=0.5, target_epoch=3)
+            EarlyStoppingAtSpecificEpoch(patience=4, threshold=1e-3, monitor="val_loss"),
+            EarlyStopCallback(metric_name="val_loss", threshold=0.7, target_epoch=i)
         ]
 
         wandb_logger = WandbLogger(project=hyperparams["PROJECT"], name=f"Fold_{fold+1}")
@@ -100,7 +100,7 @@ def train_model():
         
         best_checkpoint_path = checkpoint_path
         print(f"Modelo salvo para o próximo fold: {best_checkpoint_path}")
-
+        i =- 1
     print(f"\nTreinamento finalizado. Melhor modelo salvo em: {best_checkpoint_path}")
 
     if best_checkpoint_path:
