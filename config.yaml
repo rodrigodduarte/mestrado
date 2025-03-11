@@ -2,9 +2,9 @@
 TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/D2/train"
 TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/D2/test"
 PROJECT: "D2_ensemble_kf"
-CHECKPOINT_PATH: "checkpoints_config"
+CHECKPOINT_PATH: "D2_checkpoints_config"
 NAME_DATASET: "D2"
-
+WANDB_RUN_NAME: A
 # Hiperparâmetros relacionados à configuração do modelo
 TMODEL: "swint_t"
 SHAPE: [224, 224]
