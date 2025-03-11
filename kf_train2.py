@@ -1,4 +1,5 @@
 import os
+import shutil
 import torch
 import pytorch_lightning as pl
 import numpy as np
@@ -103,11 +104,27 @@ def train_model(config=None):
 
     print(f"\nTreinamento finalizado. Melhor modelo salvo em: {best_checkpoint_path}")
 
+
     if best_checkpoint_path:
         print("\nIniciando teste final no melhor modelo...")
         best_model = CustomEnsembleModel.load_from_checkpoint(best_checkpoint_path)
         data_module.setup(stage='test')
         trainer.test(best_model, data_module)
+
+        # 🔹 Salvar o modelo final com nome formatado
+        final_model_path = f"{hyperparams['PROJECT']}/{wandb.run.name}.ckpt"
+        best_model.save_checkpoint(final_model_path)
+        print(f"Modelo final salvo em: {final_model_path}")
+
+        # Excluir diretório de checkpoints antigos
+        checkpoint_dir = hyperparams['CHECKPOINT_PATH']
+        if os.path.exists(checkpoint_dir):
+            shutil.rmtree(checkpoint_dir)
+            print(f"Diretório de checkpoints removido: {checkpoint_dir}")
+        else:
+            print(f"Diretório {checkpoint_dir} não encontrado, nada a remover.")
+
+
 
     wandb.finish()
 
