@@ -1,9 +1,9 @@
 # Caminhos dos diretórios de treino e teste
-TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/train"
-TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/test"
-PROJECT: "flavia_ensemble_kf"
+TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/D2/train"
+TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/D2/test"
+PROJECT: "D2_ensemble_kf"
 CHECKPOINT_PATH: "checkpoints_config2"
-NAME_DATASET: "flavia"
+NAME_DATASET: "D2"
 
 # Hiperparâmetros relacionados à configuração do modelo
 TMODEL: "convnext_t"
@@ -23,7 +23,6 @@ WEIGHT_DECAY: 9.3116e-7
 LAYER_SCALE: 1.47315
 MLP_VECTOR_MODEL_SCALE: 0.76484
 K_FOLDS: 5
-
 
 # Configurações de hardware e execução
 NUM_WORKERS: 4
