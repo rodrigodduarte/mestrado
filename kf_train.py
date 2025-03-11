@@ -39,6 +39,23 @@ def train_model(config=None):
     
     wandb.init(project=hyperparams["PROJECT"], config=config)
     
+    model = CustomEnsembleModel(
+        tmodel=hyperparams["TMODEL"],
+        name_dataset=hyperparams["NAME_DATASET"],
+        shape=hyperparams["SHAPE"],
+        epochs=epochs_per_fold,
+        learning_rate=float(hyperparams["LEARNING_RATE"]),
+        features_dim=hyperparams["FEATURES_DIM"],
+        scale_factor=hyperparams['SCALE_FACTOR'],
+        drop_path_rate=hyperparams['DROP_PATH_RATE'],
+        num_classes=hyperparams['NUM_CLASSES'],
+        label_smoothing=hyperparams['LABEL_SMOOTHING'],
+        optimizer_momentum=(hyperparams['OPTIMIZER_MOMENTUM'][0], hyperparams['OPTIMIZER_MOMENTUM'][1]),
+        weight_decay=float(hyperparams['WEIGHT_DECAY']),
+        layer_scale=hyperparams['LAYER_SCALE'],
+        mlp_vector_model_scale=hyperparams['MLP_VECTOR_MODEL_SCALE']
+        )
+    
     for fold in range(k_splits):
         print(f"\nTreinando Fold {fold+1}/{k_splits}")
 
@@ -52,30 +69,6 @@ def train_model(config=None):
             fold_idx=fold
         )
         data_module.setup(stage='fit')
-
-        # Determinar o checkpoint do fold anterior
-        previous_checkpoint = f"{hyperparams['CHECKPOINT_PATH']}/fold_{fold}.ckpt" if fold > 0 else None
-        
-        if previous_checkpoint and os.path.exists(previous_checkpoint):
-            print(f"Carregando modelo do fold anterior: {previous_checkpoint}")
-            model = CustomEnsembleModel.load_from_checkpoint(previous_checkpoint)
-        else:
-            model = CustomEnsembleModel(
-                tmodel=hyperparams["TMODEL"],
-                name_dataset=hyperparams["NAME_DATASET"],
-                shape=hyperparams["SHAPE"],
-                epochs=epochs_per_fold,
-                learning_rate=float(hyperparams["LEARNING_RATE"]),
-                features_dim=hyperparams["FEATURES_DIM"],
-                scale_factor=hyperparams['SCALE_FACTOR'],
-                drop_path_rate=hyperparams['DROP_PATH_RATE'],
-                num_classes=hyperparams['NUM_CLASSES'],
-                label_smoothing=hyperparams['LABEL_SMOOTHING'],
-                optimizer_momentum=(hyperparams['OPTIMIZER_MOMENTUM'][0], hyperparams['OPTIMIZER_MOMENTUM'][1]),
-                weight_decay=float(hyperparams['WEIGHT_DECAY']),
-                layer_scale=hyperparams['LAYER_SCALE'],
-                mlp_vector_model_scale=hyperparams['MLP_VECTOR_MODEL_SCALE']
-            )
 
         checkpoint_path = f"{hyperparams['CHECKPOINT_PATH']}/fold_{fold+1}.ckpt"
         callbacks = [
@@ -100,7 +93,6 @@ def train_model(config=None):
         trainer.fit(model, data_module)
         
         best_checkpoint_path = checkpoint_path
-        print(f"Modelo salvo para o próximo fold: {best_checkpoint_path}")
 
     print(f"\nTreinamento finalizado. Melhor modelo salvo em: {best_checkpoint_path}")
 
@@ -111,18 +103,21 @@ def train_model(config=None):
         data_module.setup(stage='test')
         trainer.test(best_model, data_module)
 
-        # 🔹 Salvar o modelo final com nome formatado
-        final_model_path = f"{hyperparams['PROJECT']}/{hyperparams['TMODEL']}/{wandb.run.name}.ckpt"
-        trainer.save_checkpoint(final_model_path)
-        print(f"Modelo final salvo em: {final_model_path}")
+        # 🔹 Definir diretório de destino e salvar o modelo diretamente lá
+        final_model_dir = f"{hyperparams['PROJECT']}/runs/{wandb.run.name}"
+        os.makedirs(final_model_dir, exist_ok=True)
+        final_model_path = os.path.join(final_model_dir, "best_model.ckpt")
 
-        # Excluir diretório de checkpoints antigos
-        checkpoint_dir = hyperparams['CHECKPOINT_PATH']
-        if os.path.exists(checkpoint_dir):
-            shutil.rmtree(checkpoint_dir)
-            print(f"Diretório de checkpoints removido: {checkpoint_dir}")
+        # 🔹 Salvar o modelo final no diretório correto
+        trainer.save_checkpoint(final_model_path)
+        print(f"Melhor modelo salvo em: {final_model_path}")
+
+        # 🔥 Excluir diretório de checkpoints antigos
+        if os.path.exists(hyperparams['CHECKPOINT_PATH']):
+            shutil.rmtree(hyperparams['CHECKPOINT_PATH'])
+            print(f"Diretório de checkpoints removido: {hyperparams['CHECKPOINT_PATH']}")
         else:
-            print(f"Diretório {checkpoint_dir} não encontrado, nada a remover.")
+            print(f"Diretório {hyperparams['CHECKPOINT_PATH']} não encontrado, nada a remover.")
 
 
 
