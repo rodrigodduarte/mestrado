@@ -62,9 +62,9 @@ def train_model(config=None):
         
         for fold in range(k_splits):
     
-            if stop_all_folds_callback.should_stop_training():
-                print("🚨 Stop All Folds foi ativado! Encerrando a execução e iniciando nova run.")
-                break  # Sai do treinamento antes de começar os próximos folds         
+            # if stop_all_folds_callback.should_stop_training():
+            #     print("🚨 Stop All Folds foi ativado! Encerrando a execução e iniciando nova run.")
+            #     break  # Sai do treinamento antes de começar os próximos folds         
         
             print(f"\nTreinando Fold {fold+1}/{k_splits}")
 
@@ -103,10 +103,14 @@ def train_model(config=None):
             
             best_checkpoint_path = checkpoint_path
 
+            if stop_all_folds_callback.should_stop_training():
+                print("🚨 Stop All Folds foi ativado! Encerrando a execução e iniciando nova run.")
+                break  # Sai do treinamento antes de começar os próximos folds     
+
         print(f"\nTreinamento finalizado. Melhor modelo salvo em: {best_checkpoint_path}")
 
 
-        if best_checkpoint_path:
+        if best_checkpoint_path and not stop_all_folds_callback.should_stop_training():
             print("\nIniciando teste final no melhor modelo...")
             best_model = CustomEnsembleModel.load_from_checkpoint(best_checkpoint_path)
             data_module.setup(stage='test')
@@ -121,12 +125,12 @@ def train_model(config=None):
             trainer.save_checkpoint(final_model_path)
             print(f"Melhor modelo salvo em: {final_model_path}")
 
-            # Excluir diretório de checkpoints antigos
-            if os.path.exists(hyperparams['CHECKPOINT_PATH']):
-                shutil.rmtree(hyperparams['CHECKPOINT_PATH'])
-                print(f"Diretório de checkpoints removido: {hyperparams['CHECKPOINT_PATH']}")
-            else:
-                print(f"Diretório {hyperparams['CHECKPOINT_PATH']} não encontrado, nada a remover.")
+        # Excluir diretório de checkpoints antigos
+        if os.path.exists(hyperparams['CHECKPOINT_PATH']):
+            shutil.rmtree(hyperparams['CHECKPOINT_PATH'])
+            print(f"Diretório de checkpoints removido: {hyperparams['CHECKPOINT_PATH']}")
+        else:
+            print(f"Diretório {hyperparams['CHECKPOINT_PATH']} não encontrado, nada a remover.")
 
 
 
