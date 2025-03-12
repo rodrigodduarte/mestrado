@@ -14,6 +14,7 @@ from callbacks import (
     EarlyStoppingAtSpecificEpoch,
     SaveBestOrLastModelCallback,
     EarlyStopCallback
+
 )
 
 # Carregar hiperparâmetros do arquivo config2.yaml
@@ -37,87 +38,88 @@ def train_model(config=None):
     best_checkpoint_path = None
     epochs_per_fold = hyperparams['MAX_EPOCHS'] // k_splits  
     
-    wandb.init(project=hyperparams["PROJECT"], config=config)
     
-    model = CustomEnsembleModel(
-        tmodel=hyperparams["TMODEL"],
-        name_dataset=hyperparams["NAME_DATASET"],
-        shape=hyperparams["SHAPE"],
-        epochs=epochs_per_fold,
-        learning_rate=float(hyperparams["LEARNING_RATE"]),
-        features_dim=hyperparams["FEATURES_DIM"],
-        scale_factor=hyperparams['SCALE_FACTOR'],
-        drop_path_rate=hyperparams['DROP_PATH_RATE'],
-        num_classes=hyperparams['NUM_CLASSES'],
-        label_smoothing=hyperparams['LABEL_SMOOTHING'],
-        optimizer_momentum=(hyperparams['OPTIMIZER_MOMENTUM'][0], hyperparams['OPTIMIZER_MOMENTUM'][1]),
-        weight_decay=float(hyperparams['WEIGHT_DECAY']),
-        layer_scale=hyperparams['LAYER_SCALE'],
-        mlp_vector_model_scale=hyperparams['MLP_VECTOR_MODEL_SCALE']
-        )
-    
-    for fold in range(k_splits):
-        print(f"\nTreinando Fold {fold+1}/{k_splits}")
-
-        data_module = CustomImageCSVModule_kf(
-            train_dir=hyperparams['TRAIN_DIR'],
-            test_dir=hyperparams['TEST_DIR'],
-            shape=hyperparams['SHAPE'],
-            batch_size=hyperparams['BATCH_SIZE'],
-            num_workers=hyperparams['NUM_WORKERS'],
-            n_splits=k_splits,
-            fold_idx=fold
-        )
-        data_module.setup(stage='fit')
-
-        checkpoint_path = f"{hyperparams['CHECKPOINT_PATH']}/fold_{fold+1}.ckpt"
-        callbacks = [
-            TQDMProgressBar(leave=True),
-            SaveBestOrLastModelCallback(checkpoint_path),
-            EarlyStoppingAtSpecificEpoch(patience=4, threshold=1e-3, monitor="val_loss"),
-            EarlyStopCallback(metric_name="val_loss", threshold=0.7, target_epoch=4)
-        ]
-
-        wandb_logger = WandbLogger(project=hyperparams["PROJECT"], name=f"Fold_{fold+1}")
-
-        trainer = pl.Trainer(
-            logger=wandb_logger,
-            log_every_n_steps=10,
-            accelerator=hyperparams['ACCELERATOR'],
-            devices=hyperparams['DEVICES'],
-            precision=hyperparams['PRECISION'],
-            max_epochs=epochs_per_fold,
-            callbacks=callbacks
-        )
-
-        trainer.fit(model, data_module)
+    with wandb.init(project=hyperparams["PROJECT"], config=config):
+        config_sweep = wandb.config
         
-        best_checkpoint_path = checkpoint_path
+        model = CustomEnsembleModel(
+            tmodel=hyperparams["TMODEL"],
+            name_dataset=hyperparams["NAME_DATASET"],
+            shape=hyperparams["SHAPE"],
+            epochs=hyperparams['MAX_EPOCHS'],
+            learning_rate=float(config_sweep.learning_rate),
+            features_dim=hyperparams["FEATURES_DIM"],
+            scale_factor=hyperparams['SCALE_FACTOR'],
+            drop_path_rate=config_sweep.drop_path_rate,
+            num_classes=hyperparams['NUM_CLASSES'],
+            label_smoothing=config_sweep.label_smoothing,
+            optimizer_momentum=(config_sweep.optimizer_momentum, 0.999),  # AdamW usa dois betas
+            weight_decay=float(config_sweep.weight_decay),
+            layer_scale=config_sweep.layer_scale,
+            mlp_vector_model_scale=config_sweep.mlp_vector_model_scale)
+        
+        for fold in range(k_splits):
+            print(f"\nTreinando Fold {fold+1}/{k_splits}")
 
-    print(f"\nTreinamento finalizado. Melhor modelo salvo em: {best_checkpoint_path}")
+            data_module = CustomImageCSVModule_kf(
+                train_dir=hyperparams['TRAIN_DIR'],
+                test_dir=hyperparams['TEST_DIR'],
+                shape=hyperparams['SHAPE'],
+                batch_size=hyperparams['BATCH_SIZE'],
+                num_workers=hyperparams['NUM_WORKERS'],
+                n_splits=k_splits,
+                fold_idx=fold
+            )
+            data_module.setup(stage='fit')
+
+            checkpoint_path = f"{hyperparams['CHECKPOINT_PATH']}/fold_{fold+1}.ckpt"
+            callbacks = [
+                TQDMProgressBar(leave=True),
+                SaveBestOrLastModelCallback(checkpoint_path),
+                EarlyStoppingAtSpecificEpoch(patience=4, threshold=1e-3, monitor="val_loss"),
+                EarlyStopCallback(metric_name="val_loss", threshold=0.7, target_epoch=4)
+            ]
+
+            wandb_logger = WandbLogger(project=hyperparams["PROJECT"], name=f"Fold_{fold+1}")
+
+            trainer = pl.Trainer(
+                logger=wandb_logger,
+                log_every_n_steps=10,
+                accelerator=hyperparams['ACCELERATOR'],
+                devices=hyperparams['DEVICES'],
+                precision=hyperparams['PRECISION'],
+                max_epochs=epochs_per_fold,
+                callbacks=callbacks
+            )
+
+            trainer.fit(model, data_module)
+            
+            best_checkpoint_path = checkpoint_path
+
+        print(f"\nTreinamento finalizado. Melhor modelo salvo em: {best_checkpoint_path}")
 
 
-    if best_checkpoint_path:
-        print("\nIniciando teste final no melhor modelo...")
-        best_model = CustomEnsembleModel.load_from_checkpoint(best_checkpoint_path)
-        data_module.setup(stage='test')
-        trainer.test(best_model, data_module)
+        if best_checkpoint_path:
+            print("\nIniciando teste final no melhor modelo...")
+            best_model = CustomEnsembleModel.load_from_checkpoint(best_checkpoint_path)
+            data_module.setup(stage='test')
+            trainer.test(best_model, data_module)
 
-        # 🔹 Definir diretório de destino e salvar o modelo diretamente lá
-        final_model_dir = f"{hyperparams['PROJECT']}/runs/{wandb.run.name}"
-        os.makedirs(final_model_dir, exist_ok=True)
-        final_model_path = os.path.join(final_model_dir, "best_model.ckpt")
+            # 🔹 Definir diretório de destino e salvar o modelo diretamente lá
+            final_model_dir = f"{hyperparams['PROJECT']}/runs/{wandb.run.name}"
+            os.makedirs(final_model_dir, exist_ok=True)
+            final_model_path = os.path.join(final_model_dir, "best_model.ckpt")
 
-        # 🔹 Salvar o modelo final no diretório correto
-        trainer.save_checkpoint(final_model_path)
-        print(f"Melhor modelo salvo em: {final_model_path}")
+            # 🔹 Salvar o modelo final no diretório correto
+            trainer.save_checkpoint(final_model_path)
+            print(f"Melhor modelo salvo em: {final_model_path}")
 
-        # 🔥 Excluir diretório de checkpoints antigos
-        if os.path.exists(hyperparams['CHECKPOINT_PATH']):
-            shutil.rmtree(hyperparams['CHECKPOINT_PATH'])
-            print(f"Diretório de checkpoints removido: {hyperparams['CHECKPOINT_PATH']}")
-        else:
-            print(f"Diretório {hyperparams['CHECKPOINT_PATH']} não encontrado, nada a remover.")
+            # Excluir diretório de checkpoints antigos
+            if os.path.exists(hyperparams['CHECKPOINT_PATH']):
+                shutil.rmtree(hyperparams['CHECKPOINT_PATH'])
+                print(f"Diretório de checkpoints removido: {hyperparams['CHECKPOINT_PATH']}")
+            else:
+                print(f"Diretório {hyperparams['CHECKPOINT_PATH']} não encontrado, nada a remover.")
 
 
 
@@ -133,7 +135,7 @@ if __name__ == "__main__":
             'weight_decay': {'min': 1e-7, 'max': 1e-6, 'distribution': 'uniform'},
             'optimizer_momentum': {'min': 0.92, 'max': 0.99, 'distribution': 'uniform'},
             'mlp_vector_model_scale': {'min': 0.8, 'max': 1.3, 'distribution': 'uniform'},
-            'layer_scale': {'min': 0.5, 'max': 1.5, 'distribution': 'uniform'},
+            'layer_scale': {'min': 0.5, 'max': 4, 'distribution': 'uniform'},
             'drop_path_rate': {'min': 0.0, 'max': 0.5, 'distribution': 'uniform'},
             'label_smoothing': {'min': 0.0, 'max': 0.2, 'distribution': 'uniform'}
         }
