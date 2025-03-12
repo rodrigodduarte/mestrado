@@ -40,6 +40,7 @@ def train_model(config=None):
     
     
     with wandb.init(project=hyperparams["PROJECT"], config=config):
+        print(wandb.run.name)
         config_sweep = wandb.config
         
         model = CustomEnsembleModel(
