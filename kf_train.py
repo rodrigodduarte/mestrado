@@ -39,7 +39,7 @@ def train_model(config=None):
     epochs_per_fold = hyperparams['MAX_EPOCHS'] // k_splits  
     
     
-    with wandb.init(project=hyperparams["PROJECT"], config=config)
+    with wandb.init(project=hyperparams["PROJECT"], config=config):
         config_sweep = wandb.config
         
         model = CustomEnsembleModel(
