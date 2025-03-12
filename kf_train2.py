@@ -64,7 +64,7 @@ def train_model(config=None):
     
             if stop_all_folds_callback.should_stop_training():
                 print("🚨 Stop All Folds foi ativado! Encerrando a execução e iniciando nova run.")
-                return  # Sai do treinamento antes de começar os próximos folds         
+                break  # Sai do treinamento antes de começar os próximos folds         
         
             print(f"\nTreinando Fold {fold+1}/{k_splits}")
 
@@ -83,7 +83,7 @@ def train_model(config=None):
             callbacks = [
                 TQDMProgressBar(leave=True),
                 SaveBestOrLastModelCallback(checkpoint_path),
-                EarlyStoppingAtSpecificEpoch(patience=4, threshold=1e-3, monitor="val_loss"),
+                # EarlyStoppingAtSpecificEpoch(patience=4, threshold=1e-3, monitor="val_loss"),
                 stop_all_folds_callback
             ]
 

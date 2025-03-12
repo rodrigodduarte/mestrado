@@ -83,7 +83,7 @@ def train_model(config=None):
             callbacks = [
                 TQDMProgressBar(leave=True),
                 SaveBestOrLastModelCallback(checkpoint_path),
-                EarlyStoppingAtSpecificEpoch(patience=4, threshold=1e-3, monitor="val_loss"),
+                # EarlyStoppingAtSpecificEpoch(patience=4, threshold=1e-3, monitor="val_loss"),
                 stop_all_folds_callback
             ]
 
