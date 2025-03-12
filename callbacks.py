@@ -203,5 +203,5 @@ class EarlyStopCallback(pl.callbacks.Callback):
                 trainer.should_stop = True
                 self.early_stop_counter = True
                 
-        def should_stop_training(self):
-            return self.early_stop_counter  # 🔹 Retorna True se o contador foi ativado
+    def should_stop_training(self):
+        return self.early_stop_counter  # 🔹 Retorna True se o contador foi ativado
