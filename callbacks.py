@@ -200,3 +200,4 @@ class EarlyStopCallback(pl.callbacks.Callback):
                     f"{self.metric_name} ({metric_value:.4f}) >= {self.threshold}."
                 )
                 trainer.should_stop = True
+                raise SystemExit("Treinamento interrompido para iniciar nova run.")
