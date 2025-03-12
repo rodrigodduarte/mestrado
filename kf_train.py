@@ -107,23 +107,30 @@ def train_model(config=None):
                 print("🚨 Stop All Folds foi ativado! Encerrando a execução e iniciando nova run.")
                 break  # Sai do treinamento antes de começar os próximos folds     
 
-        print(f"\nTreinamento finalizado. Melhor modelo salvo em: {best_checkpoint_path}")
+            else:
+                print(f"\nTreinamento finalizado. Modelo salvo em: {best_checkpoint_path}")
 
 
         if best_checkpoint_path and not stop_all_folds_callback.should_stop_training():
-            print("\nIniciando teste final no melhor modelo...")
-            best_model = CustomEnsembleModel.load_from_checkpoint(best_checkpoint_path)
-            data_module.setup(stage='test')
-            trainer.test(best_model, data_module)
+            print("\nSalvando o melhor modelo antes de carregar para o teste...")
 
             # 🔹 Definir diretório de destino e salvar o modelo diretamente lá
             final_model_dir = f"{hyperparams['PROJECT']}/runs/{wandb.run.name}"
             os.makedirs(final_model_dir, exist_ok=True)
             final_model_path = os.path.join(final_model_dir, "best_model.ckpt")
 
-            # 🔹 Salvar o modelo final no diretório correto
+            # 🔹 Salvar o modelo antes de carregar
             trainer.save_checkpoint(final_model_path)
-            print(f"Melhor modelo salvo em: {final_model_path}")
+            print(f"✅ Modelo salvo em: {final_model_path}")
+
+            # 🔹 Agora carregamos o modelo salvo para garantir que está correto
+            print("\nIniciando teste final no melhor modelo...")
+            best_model = CustomEnsembleModel.load_from_checkpoint(final_model_path)
+
+            data_module.setup(stage='test')
+            trainer.test(best_model, data_module)
+
+            print(f"✅ Teste final concluído com sucesso usando {final_model_path}")
 
         # Excluir diretório de checkpoints antigos
         if os.path.exists(hyperparams['CHECKPOINT_PATH']):
