@@ -58,7 +58,7 @@ def train_model(config=None):
             layer_scale=config_sweep.layer_scale,
             mlp_vector_model_scale=config_sweep.mlp_vector_model_scale)
         
-        stop_all_folds_callback = EarlyStopCallback(metric_name="val_loss", threshold=0.7, target_epoch=1)
+        stop_all_folds_callback = EarlyStopCallback(metric_name="val_loss", threshold=0.7, target_epoch=4)
         
         for fold in range(k_splits):
     
@@ -125,12 +125,12 @@ def train_model(config=None):
             trainer.save_checkpoint(final_model_path)
             print(f"Melhor modelo salvo em: {final_model_path}")
 
-            # Excluir diretório de checkpoints antigos
-            if os.path.exists(hyperparams['CHECKPOINT_PATH']):
-                shutil.rmtree(hyperparams['CHECKPOINT_PATH'])
-                print(f"Diretório de checkpoints removido: {hyperparams['CHECKPOINT_PATH']}")
-            else:
-                print(f"Diretório {hyperparams['CHECKPOINT_PATH']} não encontrado, nada a remover.")
+        # Excluir diretório de checkpoints antigos
+        if os.path.exists(hyperparams['CHECKPOINT_PATH']):
+            shutil.rmtree(hyperparams['CHECKPOINT_PATH'])
+            print(f"Diretório de checkpoints removido: {hyperparams['CHECKPOINT_PATH']}")
+        else:
+            print(f"Diretório {hyperparams['CHECKPOINT_PATH']} não encontrado, nada a remover.")
 
 
 
@@ -146,7 +146,7 @@ if __name__ == "__main__":
             'weight_decay': {'min': 1e-7, 'max': 1e-6, 'distribution': 'uniform'},
             'optimizer_momentum': {'min': 0.92, 'max': 0.99, 'distribution': 'uniform'},
             'mlp_vector_model_scale': {'min': 0.8, 'max': 1.3, 'distribution': 'uniform'},
-            'layer_scale': {'min': 0.1, 'max': 0.2, 'distribution': 'uniform'},
+            'layer_scale': {'min': 0.5, 'max': 2, 'distribution': 'uniform'},
             'drop_path_rate': {'min': 0.0, 'max': 0.5, 'distribution': 'uniform'},
             'label_smoothing': {'min': 0.0, 'max': 0.2, 'distribution': 'uniform'}
         }
