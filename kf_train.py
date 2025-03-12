@@ -80,7 +80,7 @@ def train_model(config=None):
             )
             data_module.setup(stage='fit')
 
-            checkpoint_path = f"{hyperparams['CHECKPOINT_PATH']}/fold_{fold+1}.ckpt"
+            checkpoint_path = f"{hyperparams['CHECKPOINT_PATH']}/{wandb.run.name}.ckpt"
             callbacks = [
                 TQDMProgressBar(leave=True),
                 SaveBestOrLastModelCallback(checkpoint_path),
@@ -88,7 +88,7 @@ def train_model(config=None):
                 stop_all_folds_callback
             ]
 
-            wandb_logger = WandbLogger(project=hyperparams["PROJECT"], name=f"Fold_{fold+1}")
+            wandb_logger = WandbLogger(project=hyperparams["PROJECT"])
 
             trainer = pl.Trainer(
                 logger=wandb_logger,
