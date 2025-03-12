@@ -59,11 +59,13 @@ def train_model(config=None):
             mlp_vector_model_scale=config_sweep.mlp_vector_model_scale)
         
         stop_all_folds_callback = EarlyStopCallback(metric_name="val_loss", threshold=0.7, target_epoch=4)
-        if stop_all_folds_callback.should_stop_training():
-            print("🚨 Stop All Folds foi ativado! Encerrando a execução e iniciando nova run.")
-            return  # Sai do treinamento antes de começar os próximos folds         
         
         for fold in range(k_splits):
+    
+            if stop_all_folds_callback.should_stop_training():
+                print("🚨 Stop All Folds foi ativado! Encerrando a execução e iniciando nova run.")
+                return  # Sai do treinamento antes de começar os próximos folds         
+        
             print(f"\nTreinando Fold {fold+1}/{k_splits}")
 
             data_module = CustomImageCSVModule_kf(
