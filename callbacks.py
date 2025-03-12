@@ -200,7 +200,7 @@ class EarlyStopCallback(pl.callbacks.Callback):
                     f"{self.metric_name} ({metric_value:.4f}) >= {self.threshold}."
                 )
                 trainer.should_stop = True
-                raise SystemExit("Treinamento interrompido para iniciar nova run.")
+                
 
 class StopAllFoldsCallback(Callback):
     def __init__(self, patience=1, threshold=1e-3, monitor="val_loss", mode="min", verbose=False):
