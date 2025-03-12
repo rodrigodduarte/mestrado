@@ -182,7 +182,7 @@ class EarlyStopCallback(pl.callbacks.Callback):
         self.metric_name = metric_name
         self.threshold = threshold
         self.target_epoch = target_epoch
-        self.early_stop_counter = 0
+        self.early_stop_counter = False
 
     def on_validation_epoch_end(self, trainer, pl_module):
         # Verifica se estamos na época alvo
@@ -201,7 +201,7 @@ class EarlyStopCallback(pl.callbacks.Callback):
                     f"{self.metric_name} ({metric_value:.4f}) >= {self.threshold}."
                 )
                 trainer.should_stop = True
-                self.early_stop_counter == 1
+                self.early_stop_counter = True
                 
-    def should_stop_training(self):
-        return self.early_stop_counter == 1  # 🔹 Retorna True se o contador foi ativado
+        def should_stop_training(self):
+            return self.early_stop_counter  # 🔹 Retorna True se o contador foi ativado

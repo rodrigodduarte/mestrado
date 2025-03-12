@@ -62,9 +62,9 @@ def train_model(config=None):
         
         for fold in range(k_splits):
     
-            if stop_all_folds_callback.should_stop_training():
-                print("🚨 Stop All Folds foi ativado! Encerrando a execução e iniciando nova run.")
-                break  # Sai do treinamento antes de começar os próximos folds         
+            # if stop_all_folds_callback.should_stop_training():
+            #     print("🚨 Stop All Folds foi ativado! Encerrando a execução e iniciando nova run.")
+            #     break  # Sai do treinamento antes de começar os próximos folds         
         
             print(f"\nTreinando Fold {fold+1}/{k_splits}")
 
@@ -102,6 +102,10 @@ def train_model(config=None):
             trainer.fit(model, data_module)
             
             best_checkpoint_path = checkpoint_path
+
+            if stop_all_folds_callback.should_stop_training():
+                print("🚨 Stop All Folds foi ativado! Encerrando a execução e iniciando nova run.")
+                break  # Sai do treinamento antes de começar os próximos folds     
 
         print(f"\nTreinamento finalizado. Melhor modelo salvo em: {best_checkpoint_path}")
 
