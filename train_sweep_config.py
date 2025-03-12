@@ -140,7 +140,7 @@ def train_model(config=None):
                 file_path = os.path.join(checkpoint_dir, file_name)
                 if os.path.isfile(file_path):  # Garante que é um arquivo
                     os.remove(file_path)
-            print(f"Todos os arquivos foram removidos da pasta {checkpoint_dir}.")
+            print(f"Todos os arquivos foram iremovidos da pasta {checkpoint_dir}.")
 
 
         empty_trash()
