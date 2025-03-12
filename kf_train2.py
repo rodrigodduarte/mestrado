@@ -40,6 +40,7 @@ def train_model(config=None):
     
     
     with wandb.init(project=hyperparams["PROJECT"], config=config):
+        print(wandb.run.name)
         config_sweep = wandb.config
         
         model = CustomEnsembleModel(
@@ -79,7 +80,7 @@ def train_model(config=None):
             )
             data_module.setup(stage='fit')
 
-            checkpoint_path = f"{hyperparams['CHECKPOINT_PATH']}/fold_{fold+1}.ckpt"
+            checkpoint_path = f"{hyperparams['CHECKPOINT_PATH']}/{wandb.run.id}.ckpt"
             callbacks = [
                 TQDMProgressBar(leave=True),
                 SaveBestOrLastModelCallback(checkpoint_path),
@@ -87,7 +88,7 @@ def train_model(config=None):
                 stop_all_folds_callback
             ]
 
-            wandb_logger = WandbLogger(project=hyperparams["PROJECT"], name=f"Fold_{fold+1}")
+            wandb_logger = WandbLogger(project=hyperparams["PROJECT"])
 
             trainer = pl.Trainer(
                 logger=wandb_logger,
@@ -115,7 +116,7 @@ def train_model(config=None):
             print("\nSalvando o melhor modelo antes de carregar para o teste...")
 
             # 🔹 Definir diretório de destino e salvar o modelo diretamente lá
-            final_model_dir = f"{hyperparams['PROJECT']}/runs/{wandb.run.name}"
+            final_model_dir = f"{hyperparams['PROJECT']}/runs/{wandb.run.id}"
             os.makedirs(final_model_dir, exist_ok=True)
             final_model_path = os.path.join(final_model_dir, "best_model.ckpt")
 
@@ -132,14 +133,25 @@ def train_model(config=None):
 
             print(f"✅ Teste final concluído com sucesso usando {final_model_path}")
 
-        # Excluir diretório de checkpoints antigos
         if os.path.exists(hyperparams['CHECKPOINT_PATH']):
+            print(f"Removendo todos os arquivos do diretório {hyperparams['CHECKPOINT_PATH']}...")
+            
+            # Apagar todos os arquivos e subdiretórios
+            for filename in os.listdir(hyperparams['CHECKPOINT_PATH']):
+                file_path = os.path.join(hyperparams['CHECKPOINT_PATH'], filename)
+                try:
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)  # Remove arquivo ou link
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)  # Remove diretório interno
+                except Exception as e:
+                    print(f"⚠️ Erro ao deletar {file_path}: {e}")
+
+            # Agora podemos remover o diretório vazio
             shutil.rmtree(hyperparams['CHECKPOINT_PATH'])
             print(f"Diretório de checkpoints removido: {hyperparams['CHECKPOINT_PATH']}")
         else:
-            print(f"Diretório {hyperparams['CHECKPOINT_PATH']} não encontrado, nada a remover.")
-
-
+            print(f"O diretório {hyperparams['CHECKPOINT_PATH']} não existe, nada a remover.")
 
     wandb.finish()
 
