@@ -240,7 +240,8 @@ class CustomEnsembleModel(pl.LightningModule):
         self.fn_loss = nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)
         
         self.model_dim = 0
-
+        self.validation_step_outputs = []
+        
         # Métricas
         self.train_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
         self.val_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
