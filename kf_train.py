@@ -64,7 +64,7 @@ def train_model(config=None):
     
             if stop_all_folds_callback.should_stop_training():
                 print("🚨 Stop All Folds foi ativado! Encerrando a execução e iniciando nova run.")
-                return  # Sai do treinamento antes de começar os próximos folds         
+                break  # Sai do treinamento antes de começar os próximos folds         
         
             print(f"\nTreinando Fold {fold+1}/{k_splits}")
 
@@ -142,7 +142,7 @@ if __name__ == "__main__":
             'weight_decay': {'min': 1e-7, 'max': 1e-6, 'distribution': 'uniform'},
             'optimizer_momentum': {'min': 0.92, 'max': 0.99, 'distribution': 'uniform'},
             'mlp_vector_model_scale': {'min': 0.8, 'max': 1.3, 'distribution': 'uniform'},
-            'layer_scale': {'min': 0.5, 'max': 3, 'distribution': 'uniform'},
+            'layer_scale': {'min': 0.5, 'max': 2, 'distribution': 'uniform'},
             'drop_path_rate': {'min': 0.0, 'max': 0.5, 'distribution': 'uniform'},
             'label_smoothing': {'min': 0.0, 'max': 0.2, 'distribution': 'uniform'}
         }
