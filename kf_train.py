@@ -112,7 +112,7 @@ def train_model(config=None):
         trainer.save_checkpoint(final_model_path)
         print(f"Melhor modelo salvo em: {final_model_path}")
 
-        # 🔥 Excluir diretório de checkpoints antigos
+        # Excluir diretório de checkpoints antigos
         if os.path.exists(hyperparams['CHECKPOINT_PATH']):
             shutil.rmtree(hyperparams['CHECKPOINT_PATH'])
             print(f"Diretório de checkpoints removido: {hyperparams['CHECKPOINT_PATH']}")

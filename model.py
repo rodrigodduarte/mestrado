@@ -284,33 +284,6 @@ class CustomEnsembleModel(pl.LightningModule):
                 )
             self.dl_model.head = self.sequential_layers
 
-        if tmodel == "cct_224":
-            self.model_dim = 384
-            self.dl_model = cct_14_7x2_224(pretrained=True, progress=True)
-            self.sequential_layers = nn.Sequential(
-                nn.Flatten(start_dim=1),
-                nn.LayerNorm(self.model_dim, eps=1e-6, elementwise_affine=True),
-            )
-            self.dl_model.classifier.fc = self.sequential_layers
-
-        if tmodel == "cct_384":
-            self.model_dim = 384
-            self.dl_model = cct_14_7x2_384(pretrained=True, progress=True)
-            self.sequential_layers = nn.Sequential(
-            nn.Flatten(start_dim=1),
-            nn.LayerNorm(self.model_dim, eps=1e-6, elementwise_affine=True)
-                )
-            self.dl_model.classifier.fc = self.sequential_layers
-
-        if tmodel == "cct_384_fl":
-            self.model_dim = 384
-            self.dl_model = cct_14_7x2_384_fl(pretrained=True, progress=True)
-            self.sequential_layers = nn.Sequential(
-            nn.Flatten(start_dim=1),
-            nn.LayerNorm(self.model_dim, eps=1e-6, elementwise_affine=True)
-                )
-            self.model.classifier.fc = self.sequential_layers
-
 
         # Modelo MLP ajustado
         self.mlp_vector_model = nn.Sequential(
@@ -384,6 +357,12 @@ class CustomEnsembleModel(pl.LightningModule):
     
         return {'test_loss': loss}
 
+    def on_validation_epoch_end(self):
+        # Aggregate predictions and perform analysis
+        avg_loss = torch.mean(torch.tensor(self.validation_step_outputs))
+        self.log('avg_val_loss', avg_loss)
+        self.validation_step_outputs.clear()  # Clear outputs for the next epoch
+        
     def _commom_step(self, batch, batch_idx):
         images, features, labels = batch
         logits = self.forward(images, features)
@@ -413,4 +392,4 @@ class CustomEnsembleModel(pl.LightningModule):
                 'frequency': 1,  # Apply the scheduler every epoch
             }
         }
-      
+

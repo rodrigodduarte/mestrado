@@ -6,7 +6,6 @@ CHECKPOINT_PATH: "swedish_checkpoints_config"
 NAME_DATASET: "swedish"
 WANDB_RUN_NAME: A
 
-
 # Hiperparâmetros relacionados à configuração do modelo
 TMODEL: "convnext_t"
 SHAPE: [224, 224]

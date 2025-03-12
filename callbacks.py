@@ -200,3 +200,46 @@ class EarlyStopCallback(pl.callbacks.Callback):
                     f"{self.metric_name} ({metric_value:.4f}) >= {self.threshold}."
                 )
                 trainer.should_stop = True
+                raise SystemExit("Treinamento interrompido para iniciar nova run.")
+
+class StopAllFoldsCallback(Callback):
+    def __init__(self, patience=1, threshold=1e-3, monitor="val_loss", mode="min", verbose=False):
+        super().__init__()
+        self.patience = patience
+        self.threshold = threshold
+        self.monitor = monitor
+        self.mode = mode
+        self.verbose = verbose
+        self.best_metric = None
+        self.counter = 0
+        self.stop_training = False
+
+    def on_validation_epoch_end(self, trainer, pl_module):
+        if self.stop_training:
+            trainer.should_stop = True
+            return
+
+        current_metric = trainer.callback_metrics.get(self.monitor)
+        if current_metric is None:
+            return
+
+        if self.best_metric is None:
+            self.best_metric = current_metric
+            return
+
+        if self.mode == "min":
+            improvement = self.best_metric - current_metric
+        else:
+            improvement = current_metric - self.best_metric
+
+        if improvement > self.threshold:
+            self.best_metric = current_metric
+            self.counter = 0
+        else:
+            self.counter += 1
+            if self.counter >= self.patience:
+                if self.verbose:
+                    print(f"🚨 Stop All Folds acionado! {self.monitor} não melhorou por {self.patience} épocas. Cancelando todos os folds e iniciando nova run.")
+                self.stop_training = True
+                trainer.should_stop = True
+                raise SystemExit("Treinamento interrompido para iniciar nova run.")
