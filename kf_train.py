@@ -110,7 +110,7 @@ def train_model(config=None):
         print(f"\nTreinamento finalizado. Melhor modelo salvo em: {best_checkpoint_path}")
 
 
-        if best_checkpoint_path:
+        if best_checkpoint_path and not stop_all_folds_callback.should_stop_training():
             print("\nIniciando teste final no melhor modelo...")
             best_model = CustomEnsembleModel.load_from_checkpoint(best_checkpoint_path)
             data_module.setup(stage='test')
