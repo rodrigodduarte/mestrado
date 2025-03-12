@@ -58,6 +58,11 @@ def train_model(config=None):
             layer_scale=config_sweep.layer_scale,
             mlp_vector_model_scale=config_sweep.mlp_vector_model_scale)
         
+        stop_all_folds_callback = EarlyStopCallback(metric_name="val_loss", threshold=0.7, target_epoch=4)
+        if stop_all_folds_callback.should_stop_training():
+            print("🚨 Stop All Folds foi ativado! Encerrando a execução e iniciando nova run.")
+            return  # Sai do treinamento antes de começar os próximos folds         
+        
         for fold in range(k_splits):
             print(f"\nTreinando Fold {fold+1}/{k_splits}")
 
@@ -77,7 +82,7 @@ def train_model(config=None):
                 TQDMProgressBar(leave=True),
                 SaveBestOrLastModelCallback(checkpoint_path),
                 EarlyStoppingAtSpecificEpoch(patience=4, threshold=1e-3, monitor="val_loss"),
-                EarlyStopCallback(metric_name="val_loss", threshold=0.7, target_epoch=4)
+                stop_all_folds_callback
             ]
 
             wandb_logger = WandbLogger(project=hyperparams["PROJECT"], name=f"Fold_{fold+1}")
@@ -135,7 +140,7 @@ if __name__ == "__main__":
             'weight_decay': {'min': 1e-7, 'max': 1e-6, 'distribution': 'uniform'},
             'optimizer_momentum': {'min': 0.92, 'max': 0.99, 'distribution': 'uniform'},
             'mlp_vector_model_scale': {'min': 0.8, 'max': 1.3, 'distribution': 'uniform'},
-            'layer_scale': {'min': 0.5, 'max': 4, 'distribution': 'uniform'},
+            'layer_scale': {'min': 9, 'max': 10, 'distribution': 'uniform'},
             'drop_path_rate': {'min': 0.0, 'max': 0.5, 'distribution': 'uniform'},
             'label_smoothing': {'min': 0.0, 'max': 0.2, 'distribution': 'uniform'}
         }
