@@ -13,8 +13,7 @@ from kf_data import CustomImageCSVModule_kf
 from callbacks import (
     EarlyStoppingAtSpecificEpoch,
     SaveBestOrLastModelCallback,
-    EarlyStopCallback,
-    StopAllFoldsCallback
+    EarlyStopCallback
 
 )
 
