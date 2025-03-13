@@ -61,6 +61,8 @@ def train_model(config=None):
         
         stop_all_folds_callback = EarlyStopCallback(metric_name="val_loss", threshold=0.7, target_epoch=4)
         
+        wandb_logger = WandbLogger(project=hyperparams["PROJECT"])
+        
         for fold in range(k_splits):
     
             # if stop_all_folds_callback.should_stop_training():
@@ -80,7 +82,7 @@ def train_model(config=None):
             )
             data_module.setup(stage='fit')
 
-            checkpoint_path = f"{hyperparams['CHECKPOINT_PATH']}/{wandb.run.id}.ckpt"
+            checkpoint_path = f"{hyperparams['CHECKPOINT_PATH']}/model.ckpt"
             callbacks = [
                 TQDMProgressBar(leave=True),
                 SaveBestOrLastModelCallback(checkpoint_path),
@@ -88,7 +90,7 @@ def train_model(config=None):
                 stop_all_folds_callback
             ]
 
-            wandb_logger = WandbLogger(project=hyperparams["PROJECT"])
+
 
             trainer = pl.Trainer(
                 logger=wandb_logger,
@@ -116,7 +118,7 @@ def train_model(config=None):
             print("\nSalvando o melhor modelo antes de carregar para o teste...")
 
             # 🔹 Definir diretório de destino e salvar o modelo diretamente lá
-            final_model_dir = f"{hyperparams['PROJECT']}/runs/{wandb.run.id}"
+            final_model_dir = f"{hyperparams['NAME_DATASET']}_bestmodel/runs/{wandb.run.sweep_id}"
             os.makedirs(final_model_dir, exist_ok=True)
             final_model_path = os.path.join(final_model_dir, "best_model.ckpt")
 
