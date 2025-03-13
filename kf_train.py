@@ -131,9 +131,11 @@ def train_model(config=None):
             best_model = CustomEnsembleModel.load_from_checkpoint(final_model_path)
 
             data_module.setup(stage='test')
-            trainer.test(best_model, data_module)
+            test_results = trainer.test(best_model, data_module)
 
-            print(f"✅ Teste final concluído com sucesso usando {final_model_path}")
+            test_accuracy = test_results[0].get("test_accuracy", 0)  # 🔥 Obtém a métrica de teste
+
+
 
         if os.path.exists(hyperparams['CHECKPOINT_PATH']):
             print(f"Removendo todos os arquivos do diretório {hyperparams['CHECKPOINT_PATH']}...")
@@ -154,7 +156,17 @@ def train_model(config=None):
             print(f"Diretório de checkpoints removido: {hyperparams['CHECKPOINT_PATH']}")
         else:
             print(f"O diretório {hyperparams['CHECKPOINT_PATH']} não existe, nada a remover.")
+            
+        print(f"✅ Teste final concluído com sucesso usando {final_model_path}")
+        
+        # Se a acurácia de teste for 100%, interrompe o Sweep
+        if test_accuracy >= 1.0:
+            print("🚨 Acurácia de 100% atingida! Interrompendo o Sweep do WandB.")
+            wandb.finish()  # Finaliza a execução da `run`
+            wandb.agent().stop()  # 🔥 Para o Sweep programaticamente
 
+        
+        
     wandb.finish()
 
 if __name__ == "__main__":
