@@ -113,7 +113,8 @@ def train_model(config=None):
             else:
                 print(f"\nTreinamento finalizado. Modelo salvo em: {best_checkpoint_path}")
 
-
+        test_accuracy = 0
+        
         if best_checkpoint_path and not stop_all_folds_callback.should_stop_training():
             print("\nSalvando o melhor modelo antes de carregar para o teste...")
 
@@ -124,7 +125,7 @@ def train_model(config=None):
 
             # 🔹 Salvar o modelo antes de carregar
             trainer.save_checkpoint(final_model_path)
-            print(f"✅ Modelo salvo em: {final_model_path}")
+            print(f"Modelo salvo em: {final_model_path}")
 
             # 🔹 Agora carregamos o modelo salvo para garantir que está correto
             print("\nIniciando teste final no melhor modelo...")
@@ -133,9 +134,9 @@ def train_model(config=None):
             data_module.setup(stage='test')
             test_results = trainer.test(best_model, data_module)
 
-            test_accuracy = test_results[0].get("test_accuracy", 0)  # 🔥 Obtém a métrica de teste
+            test_accuracy = test_results[0].get("test_accuracy", 0)  # Obtém a métrica de teste
 
-            print(f"✅ Teste final concluído com sucesso usando {final_model_path}")
+            print(f"Teste final concluído com sucesso usando {final_model_path}")
 
 
 
@@ -151,7 +152,7 @@ def train_model(config=None):
                     elif os.path.isdir(file_path):
                         shutil.rmtree(file_path)  # Remove diretório interno
                 except Exception as e:
-                    print(f"⚠️ Erro ao deletar {file_path}: {e}")
+                    print(f"Erro ao deletar {file_path}: {e}")
 
             # Agora podemos remover o diretório vazio
             shutil.rmtree(hyperparams['CHECKPOINT_PATH'])
@@ -161,7 +162,7 @@ def train_model(config=None):
             
         
         # Se a acurácia de teste for 100%, interrompe o Sweep
-        if test_accuracy >= 1.0:
+        if test_accuracy >= 1.0 and best_checkpoint_path and not stop_all_folds_callback.should_stop_training():
             print("🚨 Acurácia de 100% atingida! Interrompendo o Sweep do WandB.")
             wandb.finish()  # Finaliza a execução da `run`
             wandb.agent().stop()  # 🔥 Para o Sweep programaticamente
