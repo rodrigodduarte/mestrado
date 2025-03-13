@@ -14,7 +14,7 @@ def load_hyperparameters(file_path='config_teste.yaml'):
 
 # Carregar modelo final
 hyperparams = load_hyperparameters()
-final_model_path = hyperparams['NAME_DATASET']
+final_model_path = "/Documentos/projeto/flavia_bestmodel/runs/2vcy8lkg/best_model.ckpt"
 
 print(f"Carregando modelo final de: {final_model_path}")
 model = CustomEnsembleModel.load_from_checkpoint(final_model_path)
