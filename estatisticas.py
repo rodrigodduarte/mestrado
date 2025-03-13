@@ -84,5 +84,5 @@ def plot_confusion_matrix(cm, save_path):
     plt.show()
 
 # Criar nome do arquivo usando hyperparams["CM_PATH"]
-conf_matrix_path = os.path.join(conf_matrix_dir, f"mc_{hyperparams['CM_PATH']}.png")
+conf_matrix_path = os.path.join(conf_matrix_dir, f"mc_{os.path.basename(hyperparams['CM_PATH'])}_{hyperparams["RUN_NAME"]}.png")
 plot_confusion_matrix(conf_matrix_value, save_path=conf_matrix_path)
