@@ -170,7 +170,6 @@ def train_model(config=None):
         
         
     wandb.finish()
-    wandb.api.stop_sweep(sweep_id)
 
 if __name__ == "__main__":
     set_random_seeds()
