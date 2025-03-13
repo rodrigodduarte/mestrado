@@ -135,6 +135,8 @@ def train_model(config=None):
 
             test_accuracy = test_results[0].get("test_accuracy", 0)  # 🔥 Obtém a métrica de teste
 
+            print(f"✅ Teste final concluído com sucesso usando {final_model_path}")
+
 
 
         if os.path.exists(hyperparams['CHECKPOINT_PATH']):
@@ -157,7 +159,6 @@ def train_model(config=None):
         else:
             print(f"O diretório {hyperparams['CHECKPOINT_PATH']} não existe, nada a remover.")
             
-        print(f"✅ Teste final concluído com sucesso usando {final_model_path}")
         
         # Se a acurácia de teste for 100%, interrompe o Sweep
         if test_accuracy >= 1.0:
