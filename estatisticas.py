@@ -1,6 +1,5 @@
 import torch
 import matplotlib.pyplot as plt
-import seaborn as sns
 import pytorch_lightning as pl
 from torchmetrics import Accuracy, Precision, Recall, F1Score, ConfusionMatrix
 from model import CustomEnsembleModel
