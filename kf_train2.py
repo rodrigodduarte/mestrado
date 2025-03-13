@@ -119,7 +119,7 @@ def train_model(config=None):
             print("\nSalvando o melhor modelo antes de carregar para o teste...")
 
             # 🔹 Definir diretório de destino e salvar o modelo diretamente lá
-            final_model_dir = f"{hyperparams['NAME_DATASET']}_bestmodel/runs/{wandb.run.sweep_id}"
+            final_model_dir = f"{hyperparams['NAME_DATASET']}_bestmodel/runs/{sweep_id}"
             os.makedirs(final_model_dir, exist_ok=True)
             final_model_path = os.path.join(final_model_dir, "best_model.ckpt")
 
@@ -165,7 +165,7 @@ def train_model(config=None):
         if test_accuracy >= 1.0 and best_checkpoint_path and not stop_all_folds_callback.should_stop_training():
             print("🚨 Acurácia de 100% atingida! Interrompendo o Sweep do WandB.")
             wandb.finish()  # Finaliza a execução da `run`
-            wandb.agent().stop()  # 🔥 Para o Sweep programaticamente
+            wandb.api.stop_sweep(sweep_id) # 🔥 Para o Sweep programaticamente
 
         
         
