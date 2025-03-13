@@ -39,7 +39,7 @@ def train_model(config=None):
     epochs_per_fold = hyperparams['MAX_EPOCHS'] // k_splits  
     
     
-    with wandb.init(project=hyperparams["PROJECT"], config=config):
+    with wandb.init(project=hyperparams["PROJECT"], name=f"experimento_{wandb.run.id}", config=config):
         print(wandb.run.name)
         config_sweep = wandb.config
         
@@ -170,6 +170,7 @@ def train_model(config=None):
         
         
     wandb.finish()
+    wandb.api.stop_sweep(sweep_id)
 
 if __name__ == "__main__":
     set_random_seeds()
