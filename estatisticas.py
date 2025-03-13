@@ -1,5 +1,6 @@
 import torch
 import matplotlib.pyplot as plt
+import seaborn as sns
 import pytorch_lightning as pl
 from torchmetrics import Accuracy, Precision, Recall, F1Score, ConfusionMatrix
 from model import CustomEnsembleModel
@@ -8,7 +9,7 @@ import yaml
 import os
 
 # Carregar hiperparâmetros
-def load_hyperparameters(file_path='config_teste.yaml'):
+def load_hyperparameters(file_path='config.yaml'):
     with open(file_path, 'r') as file:
         return yaml.safe_load(file)
 
@@ -37,13 +38,6 @@ data_module = CustomImageCSVModule_kf(
 data_module.setup(stage='test')
 test_loader = data_module.test_dataloader()
 
-# Inicializar métricas
-accuracy = Accuracy(num_classes=hyperparams['NUM_CLASSES'])
-precision = Precision(num_classes=hyperparams['NUM_CLASSES'])
-recall = Recall(num_classes=hyperparams['NUM_CLASSES'])
-f1 = F1Score(num_classes=hyperparams['NUM_CLASSES'])
-conf_matrix = ConfusionMatrix(num_classes=hyperparams['NUM_CLASSES'])
-
 # Avaliação do modelo
 all_preds = []
 all_labels = []
@@ -57,6 +51,14 @@ with torch.no_grad():
 # Converter para tensores
 all_preds = torch.tensor(all_preds)
 all_labels = torch.tensor(all_labels)
+
+# Inicializar métricas
+num_classes = len(torch.unique(all_labels))
+accuracy = Accuracy(task='multiclass', num_classes=num_classes)
+precision = Precision(task='multiclass', num_classes=num_classes)
+recall = Recall(task='multiclass', num_classes=num_classes)
+f1 = F1Score(task='multiclass', num_classes=num_classes)
+conf_matrix = ConfusionMatrix(task='multiclass', num_classes=num_classes)
 
 # Calcular métricas
 acc_value = accuracy(all_preds, all_labels).item()
