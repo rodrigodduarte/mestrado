@@ -1,6 +1,5 @@
 import torch
 import matplotlib.pyplot as plt
-import seaborn as sns
 import pytorch_lightning as pl
 from torchmetrics import Accuracy, Precision, Recall, F1Score, ConfusionMatrix
 from model import CustomEnsembleModel
@@ -9,17 +8,21 @@ import yaml
 import os
 
 # Carregar hiperparâmetros
-def load_hyperparameters(file_path='config_stat.yaml'):
+def load_hyperparameters(file_path='config_teste.yaml'):
     with open(file_path, 'r') as file:
         return yaml.safe_load(file)
 
 # Carregar modelo final
 hyperparams = load_hyperparameters()
-final_model_path = f"{hyperparams['NAME_DATASET']}_bestmodel/runs/{hyperparams['PROJECT']}/best_model.ckpt"
+final_model_path = hyperparams['NAME_DATASET']
 
 print(f"Carregando modelo final de: {final_model_path}")
 model = CustomEnsembleModel.load_from_checkpoint(final_model_path)
 model.eval()
+
+# Criar diretório para salvar as matrizes de confusão
+conf_matrix_dir = os.path.join("confusion_matrix")
+os.makedirs(conf_matrix_dir, exist_ok=True)
 
 # Configurar o DataLoader de Teste
 data_module = CustomImageCSVModule_kf(
@@ -69,7 +72,7 @@ print(f"Recall: {rec_value:.4f}")
 print(f"F1-Score: {f1_value:.4f}")
 
 # Exibir e salvar matriz de confusão
-def plot_confusion_matrix(cm, save_path="confusion_matrix.png"):
+def plot_confusion_matrix(cm, save_path):
     plt.figure(figsize=(10, 7))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
     plt.xlabel('Predito')
@@ -78,4 +81,6 @@ def plot_confusion_matrix(cm, save_path="confusion_matrix.png"):
     plt.savefig(save_path)
     plt.show()
 
-plot_confusion_matrix(conf_matrix_value)
+# Criar nome do arquivo usando hyperparams["CM_PATH"]
+conf_matrix_path = os.path.join(conf_matrix_dir, f"mc_{hyperparams['CM_PATH']}.png")
+plot_confusion_matrix(conf_matrix_value, save_path=conf_matrix_path)

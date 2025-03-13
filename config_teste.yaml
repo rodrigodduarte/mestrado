@@ -4,7 +4,9 @@ TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/test"
 PROJECT: "flavia_ensemble_kf_final"
 CHECKPOINT_PATH: "flavia_checkpoints_config"
 NAME_DATASET: "flavia"
-WANDB_RUN_NAME: A
+BEST_MODEL_PATH: /Documentos/projeto/flavia_bestmodel/runs/2vcy8lkg/best_model.ckpt
+RUN_NAME: 2vcy8lkg
+CM_PATH: /home/rodrigoduarte/Documentos/projeto/matriz_de_confusao
 
 # Hiperparâmetros relacionados à configuração do modelo
 TMODEL: "swint_t"
