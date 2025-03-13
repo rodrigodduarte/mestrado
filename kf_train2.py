@@ -39,7 +39,7 @@ def train_model(config=None):
     epochs_per_fold = hyperparams['MAX_EPOCHS'] // k_splits  
     
     
-    with wandb.init(project=hyperparams["PROJECT"], name=f"experimento_{wandb.run.name}", config=config):
+    with wandb.init(project=hyperparams["PROJECT"], config=config):
         print(wandb.run.name)
         config_sweep = wandb.config
         
@@ -119,7 +119,7 @@ def train_model(config=None):
             print("\nSalvando o melhor modelo antes de carregar para o teste...")
 
             # 🔹 Definir diretório de destino e salvar o modelo diretamente lá
-            final_model_dir = f"{hyperparams['NAME_DATASET']}_bestmodel/runs/{sweep_id}"
+            final_model_dir = f"{hyperparams['NAME_DATASET']}_bestmodel/{wandb.run.name}"
             os.makedirs(final_model_dir, exist_ok=True)
             final_model_path = os.path.join(final_model_dir, "best_model.ckpt")
 
