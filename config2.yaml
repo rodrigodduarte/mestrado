@@ -1,9 +1,9 @@
 # Caminhos dos diretórios de treino e teste
-TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/D2/train"
-TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/D2/test"
-PROJECT: "D2_ensemble_kf_final"
-CHECKPOINT_PATH: "D2_checkpoints_config"
-NAME_DATASET: "D2"
+TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swedish/train"
+TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swedish/test"
+PROJECT: "swedish_ensemble_kf_final"
+CHECKPOINT_PATH: "swedish_checkpoints_config"
+NAME_DATASET: "swedish"
 WANDB_RUN_NAME: A
 
 # Hiperparâmetros relacionados à configuração do modelo
