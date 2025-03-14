@@ -7,7 +7,7 @@ NAME_DATASET: "flavia"
 WANDB_RUN_NAME: A
 
 # Hiperparâmetros relacionados à configuração do modelo
-TMODEL: "convnext_t"
+TMODEL: "swint_t"
 SHAPE: [224, 224]
 FEATURES_DIM: 648
 HIDDEN_LAYERS: 2
