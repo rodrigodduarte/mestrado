@@ -291,7 +291,7 @@ class CustomEnsembleModel(pl.LightningModule):
             nn.Linear(features_dim, int((self.mlp_vector_model_scale) * features_dim)),
             nn.GELU(approximate='none'),
             nn.LayerNorm(int((self.mlp_vector_model_scale) * features_dim)),
-            nn.Dropout(p=0.5)
+            nn.Dropout(p=0.3)
         )
 
         # Modelo de combinação ajustado
@@ -302,7 +302,7 @@ class CustomEnsembleModel(pl.LightningModule):
             nn.Linear(adjusted_dim, scaled_dim),
             nn.GELU(approximate='none'),
             nn.LayerNorm(scaled_dim),
-            nn.Dropout(p=0.5),
+            nn.Dropout(p=0.3),
             nn.Linear(scaled_dim, self.num_classes)
         )
         
