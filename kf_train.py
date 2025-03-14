@@ -59,7 +59,7 @@ def train_model(config=None):
             layer_scale=config_sweep.layer_scale,
             mlp_vector_model_scale=config_sweep.mlp_vector_model_scale)
         
-        stop_all_folds_callback = EarlyStopCallback(metric_name="val_loss", threshold=0.7, target_epoch=4)
+        stop_all_folds_callback = EarlyStopCallback(metric_name="val_loss", threshold=0.9, target_epoch=4)
         
         wandb_logger = WandbLogger(project=hyperparams["PROJECT"])
         
