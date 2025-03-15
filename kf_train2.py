@@ -17,7 +17,7 @@ from callbacks import (
 
 )
 
-# Carregar hiperparâmetros do arquivo config2.yaml
+# Carregar hiperparâmetros do arquivo config.yaml
 def load_hyperparameters(file_path):
     with open(file_path, 'r') as file:
         hyperparams = yaml.safe_load(file)
@@ -33,7 +33,7 @@ def set_random_seeds():
 
 # Função principal para treinamento com validação cruzada
 def train_model(config=None):
-    hyperparams = load_hyperparameters('config2.yaml')
+    hyperparams = load_hyperparameters('config.yaml')
     k_splits = hyperparams['K_FOLDS']
     best_checkpoint_path = None
     epochs_per_fold = hyperparams['MAX_EPOCHS'] // k_splits  
@@ -173,19 +173,32 @@ def train_model(config=None):
 
 if __name__ == "__main__":
     set_random_seeds()
+    # sweep_config = {
+    #     'method': 'random',
+    #     'metric': {'name': 'val_loss', 'goal': 'minimize'},
+    #     'parameters': {
+    #         'learning_rate': {'min': 6e-6, 'max': 1e-4, 'distribution': 'uniform'},
+    #         'weight_decay': {'min': 1e-7, 'max': 1e-6, 'distribution': 'uniform'},
+    #         'optimizer_momentum': {'min': 0.92, 'max': 0.99, 'distribution': 'uniform'},
+    #         'mlp_vector_model_scale': {'min': 0.8, 'max': 1.3, 'distribution': 'uniform'},
+    #         'layer_scale': {'min': 0.75, 'max': 3, 'distribution': 'uniform'},
+    #         'drop_path_rate': {'min': 0.0, 'max': 0.5, 'distribution': 'uniform'},
+    #         'label_smoothing': {'min': 0.0, 'max': 0.2, 'distribution': 'uniform'}
+    #     }
+    # }
     sweep_config = {
         'method': 'random',
         'metric': {'name': 'val_loss', 'goal': 'minimize'},
         'parameters': {
-            'learning_rate': {'min': 6e-6, 'max': 1e-4, 'distribution': 'uniform'},
-            'weight_decay': {'min': 1e-7, 'max': 1e-6, 'distribution': 'uniform'},
-            'optimizer_momentum': {'min': 0.92, 'max': 0.99, 'distribution': 'uniform'},
-            'mlp_vector_model_scale': {'min': 0.8, 'max': 1.3, 'distribution': 'uniform'},
-            'layer_scale': {'min': 0.75, 'max': 3, 'distribution': 'uniform'},
-            'drop_path_rate': {'min': 0.0, 'max': 0.5, 'distribution': 'uniform'},
-            'label_smoothing': {'min': 0.0, 'max': 0.2, 'distribution': 'uniform'}
+            'learning_rate': {'min': 0.00018973, 'max': 0.00018974, 'distribution': 'uniform'},
+            'weight_decay': {'min': 4.4776e-7, 'max': 4.4777e-7, 'distribution': 'uniform'},
+            'optimizer_momentum': {'min': 0.93112, 'max': 0.93113, 'distribution': 'uniform'},
+            'mlp_vector_model_scale': {'min': 0.99277, 'max': 0.99278, 'distribution': 'uniform'},
+            'layer_scale': {'min': 1.20865, 'max': 1.20866, 'distribution': 'uniform'},
+            'drop_path_rate': {'min': 0.42348, 'max': 0.42349, 'distribution': 'uniform'},
+            'label_smoothing': {'min': 0.0010508, 'max': 0.0010509, 'distribution': 'uniform'}
         }
     }
-    sweep_id = wandb.sweep(sweep_config, project=load_hyperparameters('config2.yaml')["PROJECT"])
+    sweep_id = wandb.sweep(sweep_config, project=load_hyperparameters('config.yaml')["PROJECT"])
     wandb.agent(sweep_id, function=train_model, count=200)
     wandb.finish()
