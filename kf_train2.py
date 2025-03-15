@@ -17,7 +17,7 @@ from callbacks import (
 
 )
 
-# Carregar hiperparâmetros do arquivo config.yaml
+# Carregar hiperparâmetros do arquivo config2.yaml
 def load_hyperparameters(file_path):
     with open(file_path, 'r') as file:
         hyperparams = yaml.safe_load(file)
@@ -33,7 +33,7 @@ def set_random_seeds():
 
 # Função principal para treinamento com validação cruzada
 def train_model(config=None):
-    hyperparams = load_hyperparameters('config.yaml')
+    hyperparams = load_hyperparameters('config2.yaml')
     k_splits = hyperparams['K_FOLDS']
     best_checkpoint_path = None
     epochs_per_fold = hyperparams['MAX_EPOCHS'] // k_splits  
@@ -199,6 +199,6 @@ if __name__ == "__main__":
             'label_smoothing': {'min': 0.0010508, 'max': 0.0010509, 'distribution': 'uniform'}
         }
     }
-    sweep_id = wandb.sweep(sweep_config, project=load_hyperparameters('config.yaml')["PROJECT"])
+    sweep_id = wandb.sweep(sweep_config, project=load_hyperparameters('config2.yaml')["PROJECT"])
     wandb.agent(sweep_id, function=train_model, count=200)
     wandb.finish()
