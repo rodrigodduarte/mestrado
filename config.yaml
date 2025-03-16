@@ -1,7 +1,7 @@
 # Caminhos dos diretórios de treino e teste
 TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/D2/train"
 TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/D2/test"
-PROJECT: "D2_ensemble_kf_final"
+PROJECT: "D2_kf_final"
 CHECKPOINT_PATH: "D2_checkpoints_config"
 NAME_DATASET: "D2"
 BEST_MODEL_PATH: /Documentos/projeto/D2_bestmodel/spring-sweep-38/best_model.ckpt
