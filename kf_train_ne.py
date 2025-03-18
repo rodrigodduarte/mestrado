@@ -122,9 +122,10 @@ def train_model(config=None):
             os.makedirs(final_model_dir, exist_ok=True)
             final_model_path = os.path.join(final_model_dir, "best_model.ckpt")
 
-            # 🔹 Salvar o modelo antes de carregar
-            trainer.save_checkpoint(final_model_path)
-            print(f"Modelo salvo em: {final_model_path}")
+            # 🔹 Copiar o melhor modelo salvo pelo callback para a pasta final
+            shutil.copy(best_checkpoint_path, final_model_path)
+
+            print(f"Melhor modelo copiado para: {final_model_path}")
 
             # 🔹 Agora carregamos o modelo salvo para garantir que está correto
             print("\nIniciando teste final no melhor modelo...")
@@ -139,34 +140,20 @@ def train_model(config=None):
 
 
 
-        if os.path.exists(hyperparams['CHECKPOINT_PATH']):
-            print(f"Removendo todos os arquivos do diretório {hyperparams['CHECKPOINT_PATH']}...")
-            
-            # Apagar todos os arquivos e subdiretórios
-            for filename in os.listdir(hyperparams['CHECKPOINT_PATH']):
-                file_path = os.path.join(hyperparams['CHECKPOINT_PATH'], filename)
-                try:
-                    if os.path.isfile(file_path) or os.path.islink(file_path):
-                        os.unlink(file_path)  # Remove arquivo ou link
-                    elif os.path.isdir(file_path):
-                        shutil.rmtree(file_path)  # Remove diretório interno
-                except Exception as e:
-                    print(f"Erro ao deletar {file_path}: {e}")
+        # 🔹 Determinar o diretório onde estava salvo o checkpoint anterior
+        best_checkpoint_dir = os.path.dirname(best_checkpoint_path)  # Obtém o diretório do melhor modelo salvo
 
-            # Agora podemos remover o diretório vazio
-            shutil.rmtree(hyperparams['CHECKPOINT_PATH'])
-            print(f"Diretório de checkpoints removido: {hyperparams['CHECKPOINT_PATH']}")
+        # 🔹 Remover o diretório do checkpoint anterior, se existir
+        if os.path.exists(best_checkpoint_dir):
+            print(f"Removendo todos os arquivos do diretório anterior: {best_checkpoint_dir}...")
+            
+            try:
+                shutil.rmtree(best_checkpoint_dir)  # Remove a pasta inteira
+                print(f"Diretório de checkpoints removido: {best_checkpoint_dir}")
+            except Exception as e:
+                print(f"Erro ao deletar {best_checkpoint_dir}: {e}")
         else:
-            print(f"O diretório {hyperparams['CHECKPOINT_PATH']} não existe, nada a remover.")
-        
-                # Excluir a pasta do projeto
-        project_dir = os.path.expanduser(hyperparams["PROJECT"])
-        
-        if os.path.exists(project_dir):
-            shutil.rmtree(project_dir)
-            print(f"A pasta {project_dir} foi excluída com sucesso.")
-        else:
-            print(f"A pasta {project_dir} não existe e não foi excluída.")  
+            print(f"O diretório {best_checkpoint_dir} não existe, nada a remover.")
         
         # Se a acurácia de teste for 100%, interrompe o Sweep
         if test_accuracy >= 1.0 and best_checkpoint_path and not stop_all_folds_callback.should_stop_training():
