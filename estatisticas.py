@@ -39,6 +39,8 @@ model.eval()
 # Criar diretório para salvar as matrizes de confusão
 conf_matrix_dir = os.path.join("confusion_matrix")
 os.makedirs(conf_matrix_dir, exist_ok=True)
+exemplos_dir = os.path.join(conf_matrix_dir, "exemplos")
+os.makedirs(exemplos_dir, exist_ok=True)
 
 # Configurar o DataLoader de Teste
 data_module = CustomImageModule_kf(
@@ -58,21 +60,58 @@ model.to(device)
 # Avaliação do modelo
 all_preds = []
 all_labels = []
+all_images = []
 
 with torch.no_grad():
     for images, labels in test_loader:
-        images = images.to(device)  # 🔥 Move os dados para GPU se o modelo estiver na GPU
-        labels = labels.to(device)  # 🔥 Move os rótulos também para a mesma device
+        images = images.to(device)
+        labels = labels.to(device)
 
-        outputs = model(images)  # 🔥 Agora tudo está na mesma device
+        outputs = model(images)
         preds = torch.argmax(outputs, dim=1)
 
-        all_preds.extend(preds.cpu().numpy())  # 🔹 Mover para CPU antes de converter para numpy
+        all_preds.extend(preds.cpu().numpy())
         all_labels.extend(labels.cpu().numpy())
+        all_images.extend(images.cpu())
 
 # Converter para tensores
 all_preds = torch.tensor(all_preds)
 all_labels = torch.tensor(all_labels)
+
+# Identificar exemplos classificados incorretamente
+incorrect_indices = (all_preds != all_labels).nonzero(as_tuple=True)[0].tolist()
+incorrect_examples = [(all_images[i], all_labels[i].item(), all_preds[i].item()) for i in incorrect_indices]
+
+# Selecionar no máximo 3 exemplos incorretos
+incorrect_examples = incorrect_examples[:3] if len(incorrect_examples) > 3 else incorrect_examples
+
+# Exibir resultados
+print(f"Total de exemplos classificados incorretamente: {len(incorrect_indices)}")
+
+for i, (image, true_label, pred_label) in enumerate(incorrect_examples):
+    plt.figure(figsize=(10, 5))
+    
+    # Plot da imagem incorretamente classificada
+    plt.subplot(1, 2, 1)
+    plt.imshow(image.permute(1, 2, 0))
+    plt.title(f"Errado: {pred_label}, Correto: {true_label}")
+    plt.axis("off")
+    
+    # Selecionar um exemplo aleatório da classe predita para comparação
+    class_examples = [img for img, label, _ in incorrect_examples if label == pred_label]
+    if class_examples:
+        reference_image = random.choice(class_examples)
+        plt.subplot(1, 2, 2)
+        plt.imshow(reference_image.permute(1, 2, 0))
+        plt.title(f"Exemplo da Classe {pred_label}")
+        plt.axis("off")
+    
+    # Salvar a imagem incorretamente classificada
+    erro_path = os.path.join(exemplos_dir, f"{hyperparams["PROJECT"]}_{hyperparams["TMODEL"]}_{true_label}_pred_{pred_label}.png")
+    plt.savefig(erro_path)
+    print(f"Imagem salva em: {erro_path}")
+    
+    plt.show()
 
 # Inicializar métricas
 num_classes = len(torch.unique(all_labels))
