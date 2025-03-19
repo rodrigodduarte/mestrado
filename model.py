@@ -189,8 +189,8 @@ class CustomModel(pl.LightningModule):
 
         # Calcular a precisão
         self.test_accuracy(preds, labels)   
-        self.log("test/loss_epoch", loss, on_step=False, on_epoch=True)
-        self.log("test/acc_epoch", self.test_accuracy, on_step=False, on_epoch=True)
+        self.log("test_loss", loss, on_step=False, on_epoch=True)
+        self.log("test_accuracy", self.test_accuracy, on_step=False, on_epoch=True)
 
 
     def configure_optimizers(self):
