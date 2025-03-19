@@ -1,4 +1,6 @@
 import torch
+import numpy as np
+import random
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pytorch_lightning as pl
@@ -12,6 +14,17 @@ import os
 def load_hyperparameters(file_path='config.yaml'):
     with open(file_path, 'r') as file:
         return yaml.safe_load(file)
+
+def set_random_seeds(seed=42):
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+# Definir semente fixa para reproduzir resultados
+set_random_seeds()
 
 # Carregar modelo final
 hyperparams = load_hyperparameters()

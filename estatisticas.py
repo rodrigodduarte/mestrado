@@ -13,6 +13,17 @@ def load_hyperparameters(file_path='config.yaml'):
     with open(file_path, 'r') as file:
         return yaml.safe_load(file)
 
+def set_random_seeds(seed=42):
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+# Definir semente fixa para reproduzir resultados
+set_random_seeds()
+
 # Carregar modelo final
 hyperparams = load_hyperparameters()
 final_model_path = os.path.join(f'{hyperparams['NAME_DATASET']}_bestmodel', hyperparams["RUN_NAME"], 'best_model.ckpt')
@@ -56,7 +67,7 @@ with torch.no_grad():
 
         all_preds.extend(preds.cpu().numpy())  # 🔹 Mover para CPU antes de converter para numpy
         all_labels.extend(labels.cpu().numpy())
-        
+
 # Converter para tensores
 all_preds = torch.tensor(all_preds)
 all_labels = torch.tensor(all_labels)
