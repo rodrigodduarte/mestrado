@@ -38,13 +38,21 @@ data_module = CustomImageCSVModule_kf(
 data_module.setup(stage='test')
 test_loader = data_module.test_dataloader()
 
+# Garantir que o modelo está na GPU se disponível
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
+
 # Avaliação do modelo
 all_preds = []
 all_labels = []
 with torch.no_grad():
     for images, features, labels in test_loader:
+        images = images.to(device)
+        labels = labels.to(device)
+
         outputs = model(images, features)
-        _, preds = torch.max(outputs, 1)
+        _, preds = torch.argmax(outputs, 1)
+
         all_preds.extend(preds.cpu().numpy())
         all_labels.extend(labels.cpu().numpy())
 
