@@ -107,11 +107,12 @@ for i, (image, true_label, pred_label) in enumerate(incorrect_examples):
         plt.axis("off")
     
     # Salvar a imagem incorretamente classificada
-    erro_path = os.path.join(exemplos_dir, f"{hyperparams["PROJECT"]}_{hyperparams["TMODEL"]}_{true_label}_pred_{pred_label}.png")
+    erro_path = os.path.join(exemplos_dir, os.path.basename(data_module.test_dataset.samples[incorrect_indices[i]][0]))
     plt.savefig(erro_path)
     print(f"Imagem salva em: {erro_path}")
     
     plt.show()
+
 
 # Inicializar métricas
 num_classes = len(torch.unique(all_labels))
