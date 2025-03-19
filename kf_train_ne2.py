@@ -143,17 +143,6 @@ def train_model(config=None):
         # 🔹 Determinar o diretório onde estava salvo o checkpoint anterior
         best_checkpoint_dir = os.path.dirname(best_checkpoint_path)  # Obtém o diretório do melhor modelo salvo
 
-        # 🔹 Remover o diretório do checkpoint anterior, se existir
-        if os.path.exists(best_checkpoint_dir):
-            print(f"Removendo todos os arquivos do diretório anterior: {best_checkpoint_dir}...")
-            
-            try:
-                shutil.rmtree(best_checkpoint_dir)  # Remove a pasta inteira
-                print(f"Diretório de checkpoints removido: {best_checkpoint_dir}")
-            except Exception as e:
-                print(f"Erro ao deletar {best_checkpoint_dir}: {e}")
-        else:
-            print(f"O diretório {best_checkpoint_dir} não existe, nada a remover.")
         
         # Se a acurácia de teste for 100%, interrompe o Sweep
         if test_accuracy >= 1.0 and best_checkpoint_path and not stop_all_folds_callback.should_stop_training():
@@ -162,6 +151,17 @@ def train_model(config=None):
             # wandb.api.stop_sweep(sweep_id) # 🔥 Para o Sweep programaticamente
 
         
+        # 🔹 Remover o diretório do checkpoint anterior, se existir
+    if os.path.exists(best_checkpoint_dir):
+        print(f"Removendo todos os arquivos do diretório anterior: {best_checkpoint_dir}...")
+        
+        try:
+            shutil.rmtree(best_checkpoint_dir)  # Remove a pasta inteira
+            print(f"Diretório de checkpoints removido: {best_checkpoint_dir}")
+        except Exception as e:
+            print(f"Erro ao deletar {best_checkpoint_dir}: {e}")
+    else:
+        print(f"O diretório {best_checkpoint_dir} não existe, nada a remover.")
         
     wandb.finish()
 

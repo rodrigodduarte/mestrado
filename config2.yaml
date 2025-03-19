@@ -2,7 +2,7 @@
 TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/D2/train"
 TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/D2/test"
 PROJECT: "D2_no_ensemble_kf"
-CHECKPOINT_PATH: "D2_checkpoints_config"
+CHECKPOINT_PATH: "D2_checkpoints_config_train2"
 NAME_DATASET: "D2"
 WANDB_RUN_NAME: A
 
