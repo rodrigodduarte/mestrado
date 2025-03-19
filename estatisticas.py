@@ -36,34 +36,18 @@ data_module = CustomImageModule_kf(
 data_module.setup(stage='test')
 test_loader = data_module.test_dataloader()
 
+# Inicializar o trainer do PyTorch Lightning
+trainer = pl.Trainer(accelerator='auto')
+
 # Avaliação do modelo
-all_preds = []
-all_labels = []
-with torch.no_grad():
-    for images, labels in test_loader:
-        outputs = model(images)
-        _, preds = torch.max(outputs, 1)
-        all_preds.extend(preds.cpu().numpy())
-        all_labels.extend(labels.cpu().numpy())
+results = trainer.test(model, datamodule=data_module)
 
-# Converter para tensores
-all_preds = torch.tensor(all_preds)
-all_labels = torch.tensor(all_labels)
-
-# Inicializar métricas
-num_classes = len(torch.unique(all_labels))
-accuracy = Accuracy(task='multiclass', num_classes=num_classes)
-precision = Precision(task='multiclass', num_classes=num_classes)
-recall = Recall(task='multiclass', num_classes=num_classes)
-f1 = F1Score(task='multiclass', num_classes=num_classes)
-conf_matrix = ConfusionMatrix(task='multiclass', num_classes=num_classes)
-
-# Calcular métricas
-acc_value = accuracy(all_preds, all_labels).item()
-prec_value = precision(all_preds, all_labels).item()
-rec_value = recall(all_preds, all_labels).item()
-f1_value = f1(all_preds, all_labels).item()
-conf_matrix_value = conf_matrix(all_preds, all_labels).cpu().numpy()
+# Extrair métricas
+acc_value = results[0]['test_accuracy']
+prec_value = results[0]['test_precision']
+rec_value = results[0]['test_recall']
+f1_value = results[0]['test_f1']
+conf_matrix_value = results[0]['test_confusion_matrix'].cpu().numpy()
 
 # Exibir resultados
 print(f"Acurácia: {acc_value:.4f}")
