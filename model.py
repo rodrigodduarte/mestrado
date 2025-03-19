@@ -187,10 +187,27 @@ class CustomModel(pl.LightningModule):
         loss = self.fn_loss(logits, labels)
         preds = torch.argmax(logits, 1)
 
-        # Calcular a precisão
-        self.test_accuracy(preds, labels)   
-        self.log("test_loss", loss, on_step=False, on_epoch=True)
-        self.log("test_accuracy", self.test_accuracy, on_step=False, on_epoch=True)
+        # Calcular a precisão para teste
+        self.test_accuracy(preds, labels)
+        
+        self.test_f1 = self.test_f1(preds, labels)
+        self.test_precision = self.test_precision(preds, labels)
+        self.test_recall = self.test_recall(preds, labels)
+        self.test_conf_matrix = self.confusion_matrix(preds, labels)
+
+        self.log("test_accuracy", self.test_accuracy, prog_bar=True)
+        self.log("test_f1", self.test_f1, prog_bar=True)
+        self.log("test_precision", self.test_precision, prog_bar=True)
+        self.log("test_recall", self.test_recall, prog_bar=True)
+        self.log("test_confusion_matrix", self.test_conf_matrix, prog_bar=False)
+
+        return {
+            "test_accuracy": self.test_accuracy,
+            "test_f1": self.test_f1,
+            "test_precision": self.test_precision,
+            "test_recall": self.test_recall,
+            "test_confusion_matrix": self.test_conf_matrix
+        }
 
 
     def configure_optimizers(self):
