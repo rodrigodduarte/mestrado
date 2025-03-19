@@ -51,7 +51,7 @@ with torch.no_grad():
         labels = labels.to(device)
 
         outputs = model(images, features)
-        _, preds = torch.argmax(outputs, 1)
+        preds = torch.argmax(outputs, 1)
 
         all_preds.extend(preds.cpu().numpy())
         all_labels.extend(labels.cpu().numpy())
