@@ -20,6 +20,8 @@ final_model_path = os.path.join(f'{hyperparams['NAME_DATASET']}_bestmodel', hype
 print(f"Carregando modelo final de: {final_model_path}")
 model = CustomModel.load_from_checkpoint(final_model_path)
 model.eval()
+model.to('cuda' if torch.cuda.is_available() else 'cpu')
+model.eval()
 
 # Criar diretório para salvar as matrizes de confusão
 conf_matrix_dir = os.path.join("confusion_matrix")
@@ -37,7 +39,7 @@ data_module.setup(stage='test')
 test_loader = data_module.test_dataloader()
 
 # Inicializar o trainer do PyTorch Lightning
-trainer = pl.Trainer(accelerator='auto')
+trainer = pl.Trainer(accelerator='auto', devices=1)
 
 # Avaliação do modelo
 results = trainer.test(model, datamodule=data_module)
