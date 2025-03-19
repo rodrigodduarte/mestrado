@@ -4,7 +4,7 @@ import seaborn as sns
 import pytorch_lightning as pl
 from torchmetrics import Accuracy, Precision, Recall, F1Score, ConfusionMatrix
 from model import CustomEnsembleModel
-from kf_data import CustomImageModule_kf
+from kf_data import CustomImageCSVModule_kf
 import yaml
 import os
 
@@ -26,7 +26,7 @@ conf_matrix_dir = os.path.join("confusion_matrix")
 os.makedirs(conf_matrix_dir, exist_ok=True)
 
 # Configurar o DataLoader de Teste
-data_module = CustomImageModule_kf(
+data_module = CustomImageCSVModule_kf(
     train_dir=hyperparams['TRAIN_DIR'],
     test_dir=hyperparams['TEST_DIR'],
     shape=hyperparams['SHAPE'],
