@@ -15,7 +15,7 @@ def load_hyperparameters(file_path='config.yaml'):
 
 # Carregar modelo final
 hyperparams = load_hyperparameters()
-final_model_path = os.path.join(f'{hyperparams['NAMME_DATASET']}_bestmodel', hyperparams["RUN_NAME"], 'best_model.ckpt')
+final_model_path = os.path.join(f'{hyperparams['NAME_DATASET']}_bestmodel', hyperparams["RUN_NAME"], 'best_model.ckpt')
 
 print(f"Carregando modelo final de: {final_model_path}")
 model = CustomEnsembleModel.load_from_checkpoint(final_model_path)
