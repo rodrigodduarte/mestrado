@@ -38,16 +38,25 @@ data_module = CustomImageModule_kf(
 data_module.setup(stage='test')
 test_loader = data_module.test_dataloader()
 
+# Garantir que o modelo está na GPU se disponível
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
+
 # Avaliação do modelo
 all_preds = []
 all_labels = []
+
 with torch.no_grad():
     for images, labels in test_loader:
-        outputs = model(images)
-        _, preds = torch.max(outputs, 1)
-        all_preds.extend(preds.cpu().numpy())
-        all_labels.extend(labels.cpu().numpy())
+        images = images.to(device)  # 🔥 Move os dados para GPU se o modelo estiver na GPU
+        labels = labels.to(device)  # 🔥 Move os rótulos também para a mesma device
 
+        outputs = model(images)  # 🔥 Agora tudo está na mesma device
+        preds = torch.argmax(outputs, dim=1)
+
+        all_preds.extend(preds.cpu().numpy())  # 🔹 Mover para CPU antes de converter para numpy
+        all_labels.extend(labels.cpu().numpy())
+        
 # Converter para tensores
 all_preds = torch.tensor(all_preds)
 all_labels = torch.tensor(all_labels)
