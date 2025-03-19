@@ -40,8 +40,8 @@ test_loader = data_module.test_dataloader()
 all_preds = []
 all_labels = []
 with torch.no_grad():
-    for images, features, labels in test_loader:
-        outputs = model(images, features)
+    for images, labels in test_loader:
+        outputs = model(images)
         _, preds = torch.max(outputs, 1)
         all_preds.extend(preds.cpu().numpy())
         all_labels.extend(labels.cpu().numpy())
