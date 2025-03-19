@@ -6,6 +6,9 @@ CHECKPOINT_PATH: "D2_no_ensemble_kf_checkpoints_config_train2"
 NAME_DATASET: "D2"
 WANDB_RUN_NAME: A
 
+
+
+
 # Hiperparâmetros relacionados à configuração do modelo
 TMODEL: "swint_t"
 SHAPE: [224, 224]
