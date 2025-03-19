@@ -45,8 +45,21 @@ class CustomModel(pl.LightningModule):
         
         # Métricas
         self.train_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
+        self.train_f1 = F1Score(task="multiclass", num_classes=num_classes)
+        self.train_precision = Precision(task="multiclass", num_classes=num_classes)
+        self.train_recall = Recall(task="multiclass", num_classes=num_classes)
+
         self.val_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
+        self.val_f1 = F1Score(task="multiclass", num_classes=num_classes)
+        self.val_precision = Precision(task="multiclass", num_classes=num_classes)
+        self.val_recall = Recall(task="multiclass", num_classes=num_classes)
+
         self.test_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
+        self.test_f1 = F1Score(task="multiclass", num_classes=num_classes)
+        self.test_precision = Precision(task="multiclass", num_classes=num_classes)
+        self.test_recall = Recall(task="multiclass", num_classes=num_classes)
+
+        
 
         # Escolha do modelo
         if tmodel == "convnext_t":
@@ -187,27 +200,32 @@ class CustomModel(pl.LightningModule):
         loss = self.fn_loss(logits, labels)
         preds = torch.argmax(logits, 1)
 
-        # Calcular a precisão para teste
+        # Atualiza as métricas corretamente
         self.test_accuracy(preds, labels)
-        
-        self.test_f1 = self.test_f1(preds, labels)
-        self.test_precision = self.test_precision(preds, labels)
-        self.test_recall = self.test_recall(preds, labels)
-        self.test_conf_matrix = self.confusion_matrix(preds, labels)
+        self.test_f1(preds, labels)
+        self.test_precision(preds, labels)
+        self.test_recall(preds, labels)
 
-        self.log("test_accuracy", self.test_accuracy, prog_bar=True)
-        self.log("test_f1", self.test_f1, prog_bar=True)
-        self.log("test_precision", self.test_precision, prog_bar=True)
-        self.log("test_recall", self.test_recall, prog_bar=True)
-        self.log("test_confusion_matrix", self.test_conf_matrix, prog_bar=False)
+        # Loga as métricas corretamente
+        self.log("test_loss", loss, prog_bar=True, on_epoch=True)
+        self.log("test_accuracy", self.test_accuracy.compute(), prog_bar=True)
+        self.log("test_f1", self.test_f1.compute(), prog_bar=True)
+        self.log("test_precision", self.test_precision.compute(), prog_bar=True)
+        self.log("test_recall", self.test_recall.compute(), prog_bar=True)
 
         return {
-            "test_accuracy": self.test_accuracy,
-            "test_f1": self.test_f1,
-            "test_precision": self.test_precision,
-            "test_recall": self.test_recall,
-            "test_confusion_matrix": self.test_conf_matrix
-        }
+            "test_loss": loss,
+            "test_accuracy": self.test_accuracy.compute(),
+            "test_f1": self.test_f1.compute(),
+            "test_precision": self.test_precision.compute(),
+            "test_recall": self.test_recall.compute()        
+            }
+    
+    def on_test_epoch_end(self):
+        self.test_accuracy.reset()
+        self.test_f1.reset()
+        self.test_precision.reset()
+        self.test_recall.reset()
 
 
     def configure_optimizers(self):
@@ -275,8 +293,6 @@ class CustomEnsembleModel(pl.LightningModule):
         self.train_recall = Recall(task="multiclass", num_classes=num_classes)
         self.val_recall = Recall(task="multiclass", num_classes=num_classes)
         self.test_recall = Recall(task="multiclass", num_classes=num_classes)
-
-        self.confusion_matrix = MulticlassConfusionMatrix(num_classes=num_classes)                
 
 
         # self.dl_model = models.convnext_tiny(weights=ConvNeXt_Tiny_Weights.DEFAULT, 
@@ -366,14 +382,33 @@ class CustomEnsembleModel(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         images, features, labels, logits, loss, preds = self._commom_step(batch, batch_idx)
 
-        # Calcular a precisão para teste
+        # Atualiza as métricas corretamente
         self.test_accuracy(preds, labels)
-        
-        # Logar a perda e a acurácia no conjunto de teste
-        self.log('test_loss', loss, prog_bar=True, on_epoch=True)
-        self.log('test_accuracy', self.test_accuracy, prog_bar=True, on_epoch=True)
+        self.test_f1(preds, labels)
+        self.test_precision(preds, labels)
+        self.test_recall(preds, labels)
+
+        # Loga as métricas corretamente
+        self.log("test_loss", loss, prog_bar=True, on_epoch=True)
+        self.log("test_accuracy", self.test_accuracy.compute(), prog_bar=True)
+        self.log("test_f1", self.test_f1.compute(), prog_bar=True)
+        self.log("test_precision", self.test_precision.compute(), prog_bar=True)
+        self.log("test_recall", self.test_recall.compute(), prog_bar=True)
+
+        return {
+            "test_loss": loss,
+            "test_accuracy": self.test_accuracy.compute(),
+            "test_f1": self.test_f1.compute(),
+            "test_precision": self.test_precision.compute(),
+            "test_recall": self.test_recall.compute()        
+            }
     
-        return {'test_loss': loss}
+    def on_test_epoch_end(self):
+        self.test_accuracy.reset()
+        self.test_f1.reset()
+        self.test_precision.reset()
+        self.test_recall.reset()
+
 
     def on_validation_epoch_end(self):
         # Aggregate predictions and perform analysis
