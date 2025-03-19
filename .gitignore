@@ -11,3 +11,17 @@ swedish_classification_with_lightning/ymvjw4n8/checkpoints/
 checkpoints/
 checkpoints_config/
 checkpoints_config2/
+D2_bestmodel/
+D2_checkpoints_config/
+D2_checkpoints_config_train/
+D2_checkpoints_config_train2/
+D2_no_ensemble_kf/
+D2_no_ensemble_kf_checkpoints_config_train/
+D2_no_ensemble_kf_checkpoints_config_train2/
+flavia_bestmodel/
+flavia_no_ensemble_kf/
+flavia_no_ensemble_kf_checkpoints_config_train/
+flavia_no_ensemble_kf_checkpoints_config_train2/
+swedish_bestmodel/
+swedish_no_ensemble_kf/
+swedish_no_ensemble_checkpoints_config_train/
