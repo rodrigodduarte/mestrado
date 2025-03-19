@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pytorch_lightning as pl
 from torchmetrics import Accuracy, Precision, Recall, F1Score, ConfusionMatrix
-from model import CustomEnsembleModel
+from model import CustomModel
 from kf_data import CustomImageModule_kf
 import yaml
 import os
@@ -18,7 +18,7 @@ hyperparams = load_hyperparameters()
 final_model_path = os.path.join(f'{hyperparams['NAME_DATASET']}_bestmodel', hyperparams["RUN_NAME"], 'best_model.ckpt')
 
 print(f"Carregando modelo final de: {final_model_path}")
-model = CustomEnsembleModel.load_from_checkpoint(final_model_path)
+model = CustomModel.load_from_checkpoint(final_model_path)
 model.eval()
 
 # Criar diretório para salvar as matrizes de confusão
@@ -31,9 +31,7 @@ data_module = CustomImageModule_kf(
     test_dir=hyperparams['TEST_DIR'],
     shape=hyperparams['SHAPE'],
     batch_size=hyperparams['BATCH_SIZE'],
-    num_workers=hyperparams['NUM_WORKERS'],
-    n_splits=hyperparams['K_FOLDS'],
-    fold_idx=0
+    num_workers=hyperparams['NUM_WORKERS']
 )
 data_module.setup(stage='test')
 test_loader = data_module.test_dataloader()
