@@ -5,7 +5,7 @@ PROJECT: "D2_no_ensemble_kf"
 CHECKPOINT_PATH: "D2_checkpoints_config_train"
 NAME_DATASET: "D2"
 BEST_MODEL_PATH: /Documentos/projeto/D2_bestmodel/spring-sweep-38/best_model.ckpt
-RUN_NAME: spring-sweep-38
+RUN_NAME: visionary-sweep-2
 CM_PATH: /home/rodrigoduarte/Documentos/projeto/matriz_de_confusao
 
 
