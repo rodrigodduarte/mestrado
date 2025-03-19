@@ -167,32 +167,32 @@ def train_model(config=None):
 
 if __name__ == "__main__":
     set_random_seeds()
-    sweep_config = {
-        'method': 'random',
-        'metric': {'name': 'val_loss', 'goal': 'minimize'},
-        'parameters': {
-            'learning_rate': {'min': 6e-6, 'max': 1e-4, 'distribution': 'uniform'},
-            'weight_decay': {'min': 1e-7, 'max': 1e-6, 'distribution': 'uniform'},
-            'optimizer_momentum': {'min': 0.92, 'max': 0.99, 'distribution': 'uniform'},
-            'mlp_vector_model_scale': {'min': 0.8, 'max': 1.3, 'distribution': 'uniform'},
-            'layer_scale': {'min': 0.75, 'max': 3, 'distribution': 'uniform'},
-            'drop_path_rate': {'min': 0.0, 'max': 0.5, 'distribution': 'uniform'},
-            'label_smoothing': {'min': 0.0, 'max': 0.2, 'distribution': 'uniform'}
-        }
-    }
     # sweep_config = {
     #     'method': 'random',
     #     'metric': {'name': 'val_loss', 'goal': 'minimize'},
     #     'parameters': {
-    #         'learning_rate': {'min': 0.000097993, 'max': 0.000097994, 'distribution': 'uniform'},
-    #         'weight_decay': {'min': 4.4776e-7, 'max': 4.4777e-7, 'distribution': 'uniform'},
-    #         'optimizer_momentum': {'min': 0.93112, 'max': 0.93113, 'distribution': 'uniform'},
-    #         'mlp_vector_model_scale': {'min': 0.93104, 'max': 0.93105, 'distribution': 'uniform'},
-    #         'layer_scale': {'min': 0.5816, 'max': 0.5817, 'distribution': 'uniform'},
-    #         'drop_path_rate': {'min': 0.40165, 'max': 0.40166, 'distribution': 'uniform'},
-    #         'label_smoothing': {'min': 0.18968, 'max': 0.18969, 'distribution': 'uniform'}
+    #         'learning_rate': {'min': 6e-6, 'max': 1e-4, 'distribution': 'uniform'},
+    #         'weight_decay': {'min': 1e-7, 'max': 1e-6, 'distribution': 'uniform'},
+    #         'optimizer_momentum': {'min': 0.92, 'max': 0.99, 'distribution': 'uniform'},
+    #         'mlp_vector_model_scale': {'min': 0.8, 'max': 1.3, 'distribution': 'uniform'},
+    #         'layer_scale': {'min': 0.75, 'max': 3, 'distribution': 'uniform'},
+    #         'drop_path_rate': {'min': 0.0, 'max': 0.5, 'distribution': 'uniform'},
+    #         'label_smoothing': {'min': 0.0, 'max': 0.2, 'distribution': 'uniform'}
     #     }
     # }
+    sweep_config = {
+        'method': 'random',
+        'metric': {'name': 'val_loss', 'goal': 'minimize'},
+        'parameters': {
+            'learning_rate': {'min': 0.00018973, 'max': 0.00018973, 'distribution': 'uniform'},
+            'weight_decay': {'min': 4.4776e-7, 'max': 4.4777e-7, 'distribution': 'uniform'},
+            'optimizer_momentum': {'min': 0.93112, 'max': 0.93113, 'distribution': 'uniform'},
+            'mlp_vector_model_scale': {'min': 0.99277, 'max': 0.99278, 'distribution': 'uniform'},
+            'layer_scale': {'min': 1.20865, 'max': 1.20866, 'distribution': 'uniform'},
+            'drop_path_rate': {'min': 0.42349, 'max': 0.42350, 'distribution': 'uniform'},
+            'label_smoothing': {'min': 0.0010509, 'max': 0.0010510, 'distribution': 'uniform'}
+        }
+    }
     sweep_id = wandb.sweep(sweep_config, project=load_hyperparameters('config2.yaml')["PROJECT"])
     wandb.agent(sweep_id, function=train_model, count=200)
     wandb.finish()
