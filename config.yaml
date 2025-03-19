@@ -1,10 +1,10 @@
 # Caminhos dos diretórios de treino e teste
-TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/train"
-TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/test"
-PROJECT: "flavia_no_ensemble_kf"
-CHECKPOINT_PATH: "flavia_no_ensemble_kf_checkpoints_config_train"
-NAME_DATASET: "flavia"
-BEST_MODEL_PATH: /Documentos/projeto/flavia_bestmodel/spring-sweep-38/best_model.ckpt
+TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swedish/train"
+TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swedish/test"
+PROJECT: "swedish_no_ensemble_kf"
+CHECKPOINT_PATH: "swedish_no_ensemble_kf_checkpoints_config_train"
+NAME_DATASET: "swedish"
+BEST_MODEL_PATH: /Documentos/projeto/swedish_bestmodel/spring-sweep-38/best_model.ckpt
 RUN_NAME: visionary-sweep-2
 CM_PATH: /home/rodrigoduarte/Documentos/projeto/matriz_de_confusao
 

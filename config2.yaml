@@ -1,9 +1,9 @@
 # Caminhos dos diretórios de treino e teste
-TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/train"
-TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/test"
-PROJECT: "flavia_no_ensemble_kf"
-CHECKPOINT_PATH: "flavia_no_ensemble_kf_checkpoints_config_train2"
-NAME_DATASET: "flavia"
+TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swedish/train"
+TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swedish/test"
+PROJECT: "swedish_no_ensemble_kf"
+CHECKPOINT_PATH: "swedish_no_ensemble_kf_checkpoints_config_train2"
+NAME_DATASET: "swedish"
 WANDB_RUN_NAME: A
 
 # Hiperparâmetros relacionados à configuração do modelo
