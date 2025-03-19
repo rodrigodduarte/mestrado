@@ -57,7 +57,7 @@ def train_model(config=None):
             optimizer_momentum=(config_sweep.optimizer_momentum, 0.999)  
         )
         
-        stop_all_folds_callback = EarlyStopCallback(metric_name="val_loss", threshold=0.7, target_epoch=4)
+        stop_all_folds_callback = EarlyStopCallback(metric_name="val_loss", threshold=5, target_epoch=4)
         
         wandb_logger = WandbLogger(project=hyperparams["PROJECT"])
 
