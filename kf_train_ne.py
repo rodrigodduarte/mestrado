@@ -188,7 +188,7 @@ if __name__ == "__main__":
             'weight_decay': {'min': 4.4776e-7, 'max': 4.4777e-7, 'distribution': 'uniform'},
             'optimizer_momentum': {'min': 0.93112, 'max': 0.93113, 'distribution': 'uniform'},
             'mlp_vector_model_scale': {'min': 0.76484, 'max': 0.76485, 'distribution': 'uniform'},
-            'layer_scale': {'min': 1.47315, 'max': 1.47315, 'distribution': 'uniform'},
+            'layer_scale': {'min': 1.47315, 'max': 1.47316, 'distribution': 'uniform'},
             'drop_path_rate': {'min': 0.30621, 'max': 0.30622, 'distribution': 'uniform'},
             'label_smoothing': {'min': 0.049964, 'max': 0.049965, 'distribution': 'uniform'}
         }
