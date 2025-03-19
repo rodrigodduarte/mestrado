@@ -189,7 +189,7 @@ if __name__ == "__main__":
             'optimizer_momentum': {'min': 0.9257, 'max': 0.9258, 'distribution': 'uniform'},
             'mlp_vector_model_scale': {'min': 1.07551, 'max': 1.07552, 'distribution': 'uniform'},
             'layer_scale': {'min': 0.93523, 'max': 0.93524, 'distribution': 'uniform'},
-            'drop_path_rate': {'min': 0.11709, 'max': 0.11709, 'distribution': 'uniform'},
+            'drop_path_rate': {'min': 0.11709, 'max': 0.11710, 'distribution': 'uniform'},
             'label_smoothing': {'min': 0.011871, 'max': 0.011872, 'distribution': 'uniform'}
         }
     }

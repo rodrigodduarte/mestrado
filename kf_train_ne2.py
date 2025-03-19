@@ -184,7 +184,7 @@ if __name__ == "__main__":
         'method': 'random',
         'metric': {'name': 'val_loss', 'goal': 'minimize'},
         'parameters': {
-            'learning_rate': {'min': 0.00018973, 'max': 0.00018973, 'distribution': 'uniform'},
+            'learning_rate': {'min': 0.00018973, 'max': 0.00018974, 'distribution': 'uniform'},
             'weight_decay': {'min': 4.4776e-7, 'max': 4.4777e-7, 'distribution': 'uniform'},
             'optimizer_momentum': {'min': 0.93112, 'max': 0.93113, 'distribution': 'uniform'},
             'mlp_vector_model_scale': {'min': 0.99277, 'max': 0.99278, 'distribution': 'uniform'},
