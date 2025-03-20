@@ -59,7 +59,11 @@ class CustomModel(pl.LightningModule):
         self.test_precision = Precision(task="multiclass", num_classes=num_classes)
         self.test_recall = Recall(task="multiclass", num_classes=num_classes)
 
-        
+        self.test_confusion_matrix = MulticlassConfusionMatrix(num_classes=num_classes)
+
+        # 🔹 Inicializa listas para armazenar previsões e rótulos
+        self.test_preds = []
+        self.test_labels = []
 
         # Escolha do modelo
         if tmodel == "convnext_t":
@@ -212,6 +216,7 @@ class CustomModel(pl.LightningModule):
         self.test_f1(preds, labels)
         self.test_precision(preds, labels)
         self.test_recall(preds, labels)
+        self.test_confusion_matrix(preds, labels)
 
         # Loga as métricas corretamente
         self.log("test_loss", loss, prog_bar=True, on_epoch=True)
@@ -219,6 +224,7 @@ class CustomModel(pl.LightningModule):
         self.log("test_f1", self.test_f1.compute(), prog_bar=True)
         self.log("test_precision", self.test_precision.compute(), prog_bar=True)
         self.log("test_recall", self.test_recall.compute(), prog_bar=True)
+        
 
         return {
             "test_loss": loss,
@@ -233,19 +239,12 @@ class CustomModel(pl.LightningModule):
         self.test_f1.reset()
         self.test_precision.reset()
         self.test_recall.reset()
-            # Concatena todas as previsões e rótulos coletados durante o teste
-        all_preds = torch.cat(self.test_preds)
-        all_labels = torch.cat(self.test_labels)
-
-        # Define a matriz de confusão se necessário
-        conf_matrix_metric = MulticlassConfusionMatrix(num_classes=self.hparams.num_classes)
-        conf_matrix_value = conf_matrix_metric(all_preds, all_labels).cpu().numpy()
+        
+        # 🔹 Obter a matriz de confusão já acumulada pela métrica integrada
+        conf_matrix_value = self.test_confusion_matrix.compute().cpu().numpy()
+        self.test_confusion_matrix.reset()  # 🔹 Reseta a métrica para futuras execuções
 
         print("✅ Matriz de Confusão calculada após o teste.")
-        
-        # Limpar listas para evitar acúmulo de memória em execuções futuras
-        self.test_preds.clear()
-        self.test_labels.clear()
 
         return conf_matrix_value
 
