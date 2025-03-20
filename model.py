@@ -108,7 +108,7 @@ class CustomModel(pl.LightningModule):
 
         if tmodel == "swint_t":
             self.model_dim = 768
-            self.model = swin_t(weights=Swin_T_Weights.DEFAULT, drop_path_rate=self.drop_path_rate)
+            self.model = swin_t(weights=Swin_T_Weights.DEFAULT)
             self.sequential_layers = nn.Sequential(
                 nn.Flatten(start_dim=1),
                 nn.LayerNorm(self.model_dim, eps=1e-6, elementwise_affine=True),
