@@ -163,7 +163,7 @@ def train_model(config=None):
             print(f"Erro ao deletar {best_checkpoint_dir}: {e}")
     else:
         print(f"O diretório {best_checkpoint_dir} não existe, nada a remover.")
-
+        
     wandb.finish()
 
 if __name__ == "__main__":

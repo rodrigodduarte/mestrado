@@ -429,6 +429,14 @@ class CustomEnsembleModel(pl.LightningModule):
         self.test_precision.reset()
         self.test_recall.reset()
 
+        # 🔹 Obter a matriz de confusão já acumulada pela métrica integrada
+        conf_matrix_value = self.test_confusion_matrix.compute().cpu().numpy()
+        self.test_confusion_matrix.reset()  # 🔹 Reseta a métrica para futuras execuções
+
+        print("✅ Matriz de Confusão calculada após o teste.")
+
+        return conf_matrix_value
+
 
     def on_validation_epoch_end(self):
         # Aggregate predictions and perform analysis

@@ -1,8 +1,8 @@
 # Caminhos dos diretórios de treino e teste
 TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/D2/train"
 TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/D2/test"
-PROJECT: "D2_no_ensemble_kf"
-CHECKPOINT_PATH: "D2_no_ensemble_kf_checkpoints_config_train"
+PROJECT: "D2_ensemble_kf"
+CHECKPOINT_PATH: "D2_ensemble_kf_checkpoints_config_train"
 NAME_DATASET: "D2"
 BEST_MODEL_PATH: /Documentos/projeto/D2_bestmodel/visionary-sweep-2/best_model.ckpt
 RUN_NAME: visionary-sweep-2
