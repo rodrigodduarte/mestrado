@@ -7,24 +7,8 @@ import torch
 import random
 from sklearn.model_selection import KFold
 from dataset import CustomImageWithFeaturesDataset
-from torch.utils.data import Dataset
-from torchvision.transforms import ToTensor
 
-class CustomDatasetWithPaths(Dataset):
-    def __init__(self, image_folder):
-        self.dataset = image_folder
-        self.samples = image_folder.samples  # Contém os caminhos das imagens
-        self.transform = ToTensor()  # 🔹 Apenas converte PIL Image para Tensor
 
-    def __getitem__(self, index):
-        image_path, label = self.samples[index]
-        image = self.dataset.loader(image_path)  # 🔹 Carrega a imagem original
-        image = self.transform(image)  # 🔹 Converte para tensor (sem normalização ou resize)
-        return image, label, image_path  # 🔹 Retorna também o caminho da imagem
-
-    def __len__(self):
-        return len(self.dataset)
-    
 class CustomImageModule_kf(pl.LightningDataModule):
     def __init__(self, train_dir, test_dir, shape, batch_size, num_workers, n_splits=5, fold_idx=0):
         super().__init__()
@@ -70,8 +54,7 @@ class CustomImageModule_kf(pl.LightningDataModule):
             print(f"[Fold {self.fold_idx + 1}] {len(train_indices)} exemplos para treino, {len(val_indices)} para validação.")
 
         if stage == "test" or stage is None:
-            image_folder = datasets.ImageFolder(root=self.test_dir)
-            self.test_ds = CustomDatasetWithPaths(image_folder)
+            self.test_ds = datasets.ImageFolder(root=self.test_dir)
 
             print(f"[Test] {len(self.test_ds)} exemplos para teste.")
 
@@ -82,7 +65,7 @@ class CustomImageModule_kf(pl.LightningDataModule):
         return DataLoader(self.val_ds, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
     
     def test_dataloader(self):
-        return DataLoader(self.test_ds, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False, collate_fn=lambda batch: list(zip(*batch)))
+        return DataLoader(self.test_ds, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
 
 
 
