@@ -1,12 +1,12 @@
 # Caminhos dos diretórios de treino e teste
-TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swedish/train"
-TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swedish/test"
-PROJECT: "swedish_no_ensemble_kf"
-CHECKPOINT_PATH: "swedish_no_ensemble_kf_checkpoints_config_train2"
-NAME_DATASET: "swedish"
-WANDB_RUN_NAME: A
-
-
+TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/D2/train"
+TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/D2/test"
+PROJECT: "D2_no_ensemble_kf"
+CHECKPOINT_PATH: "D2_no_ensemble_kf_checkpoints_config_train"
+NAME_DATASET: "D2"
+BEST_MODEL_PATH: /Documentos/projeto/D2_bestmodel/visionary-sweep-2/best_model.ckpt
+RUN_NAME: visionary-sweep-2
+CM_PATH: /home/rodrigoduarte/Documentos/projeto/matriz_de_confusao
 
 
 # Hiperparâmetros relacionados à configuração do modelo
@@ -16,7 +16,7 @@ FEATURES_DIM: 648
 HIDDEN_LAYERS: 2
 HIDDEN_UNITS: 1296
 MAX_EPOCHS: 30
-NUM_CLASSES: 15
+NUM_CLASSES: 44
 BATCH_SIZE: 64
 LEARNING_RATE: 0.000046341
 SCALE_FACTOR: 0.8
