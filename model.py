@@ -233,6 +233,22 @@ class CustomModel(pl.LightningModule):
         self.test_f1.reset()
         self.test_precision.reset()
         self.test_recall.reset()
+        
+        # Concatena todas as previsões e rótulos coletados durante o teste
+        all_preds = torch.cat(self.test_preds)
+        all_labels = torch.cat(self.test_labels)
+
+        # Define a matriz de confusão se necessário
+        conf_matrix_metric = MulticlassConfusionMatrix(num_classes=self.hparams.num_classes)
+        conf_matrix_value = conf_matrix_metric(all_preds, all_labels).cpu().numpy()
+
+        print("✅ Matriz de Confusão calculada após o teste.")
+        
+        # Limpar listas para evitar acúmulo de memória em execuções futuras
+        self.test_preds.clear()
+        self.test_labels.clear()
+
+        return conf_matrix_value
 
 
     def configure_optimizers(self):

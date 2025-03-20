@@ -1,4 +1,5 @@
 import torch
+from PIL import Image
 import numpy as np
 import random
 import matplotlib.pyplot as plt
@@ -34,15 +35,15 @@ print(f"Carregando modelo final de: {final_model_path}")
 model = CustomModel.load_from_checkpoint(final_model_path)
 model.eval()
 model.to('cuda' if torch.cuda.is_available() else 'cpu')
-model.eval()
 
-# Criar diretório para salvar as matrizes de confusão
+# Criar diretório para salvar as matrizes de confusão e exemplos
 conf_matrix_dir = os.path.join("confusion_matrix")
 os.makedirs(conf_matrix_dir, exist_ok=True)
 exemplos_dir = os.path.join(conf_matrix_dir, "exemplos")
 os.makedirs(exemplos_dir, exist_ok=True)
 
-# Configurar o DataLoader de Teste
+
+# Configurar o DataModule de Teste
 data_module = CustomImageModule_kf(
     train_dir=hyperparams['TRAIN_DIR'],
     test_dir=hyperparams['TEST_DIR'],
@@ -51,104 +52,16 @@ data_module = CustomImageModule_kf(
     num_workers=hyperparams['NUM_WORKERS']
 )
 data_module.setup(stage='test')
-test_loader = data_module.test_dataloader()
 
-# Garantir que o modelo está na GPU se disponível
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model.to(device)
+# Usar o Trainer para rodar o teste
+trainer = pl.Trainer(accelerator='gpu' if torch.cuda.is_available() else 'cpu')
+results = trainer.test(model, datamodule=data_module)
 
-# Avaliação do modelo
-all_preds = []
-all_labels = []
-all_images = []
+# Calcular a matriz de confusão a partir do modelo
+conf_matrix_value = model.on_test_epoch_end()
 
-# Avaliação do modelo
-all_preds = []
-all_labels = []
-all_image_paths = []
-
-with torch.no_grad():
-    for batch in test_loader:
-        if len(batch) == 3:  # Se paths estiver incluso
-            images, labels, paths = batch  
-        else:  # Se paths NÃO estiver incluso, usamos apenas imagens e labels
-            images, labels = batch
-            paths = [None] * len(labels)  # Criamos uma lista vazia de paths
-
-        images = images.to(device)
-        labels = labels.to(device)
-
-        outputs = model(images)
-        preds = torch.argmax(outputs, dim=1)
-
-        all_preds.extend(preds.cpu().numpy())
-        all_labels.extend(labels.cpu().numpy())
-        all_image_paths.extend(paths)  # Pode conter Nones se paths não existir
-
-# Garantir que `all_image_paths` contenha apenas strings válidas
-all_image_paths = [p if p is not None else "desconhecido" for p in all_image_paths]
-
-# Converter para tensores
-all_preds = torch.tensor(all_preds)
-all_labels = torch.tensor(all_labels)
-
-# Identificar exemplos classificados incorretamente
-incorrect_indices = (all_preds != all_labels).nonzero(as_tuple=True)[0].tolist()
-incorrect_examples = [(all_images[i], all_labels[i].item(), all_preds[i].item()) for i in incorrect_indices]
-
-# Selecionar no máximo 3 exemplos incorretos
-incorrect_examples = incorrect_examples[:3] if len(incorrect_examples) > 3 else incorrect_examples
-
-# Exibir resultados
-print(f"Total de exemplos classificados incorretamente: {len(incorrect_indices)}")
-
-for i, (image, true_label, pred_label) in enumerate(incorrect_examples):
-    plt.figure(figsize=(10, 5))
-    
-    # Plot da imagem incorretamente classificada
-    plt.subplot(1, 2, 1)
-    plt.imshow(image.permute(1, 2, 0))
-    plt.title(f"Errado: {pred_label}, Correto: {true_label}")
-    plt.axis("off")
-    
-    # Selecionar um exemplo aleatório da classe predita para comparação
-    class_examples = [img for img, label, _ in incorrect_examples if label == pred_label]
-    if class_examples:
-        reference_image = random.choice(class_examples)
-        plt.subplot(1, 2, 2)
-        plt.imshow(reference_image.permute(1, 2, 0))
-        plt.title(f"Exemplo da Classe {pred_label}")
-        plt.axis("off")
-    
-    # Salvar a imagem incorretamente classificada
-    erro_path = os.path.join(exemplos_dir, f"{true_label}_pred_{pred_label}.png")
-    plt.savefig(erro_path)
-    print(f"Imagem salva em: {erro_path}")
-    
-    plt.show()
-
-# Inicializar métricas
-num_classes = len(torch.unique(all_labels))
-accuracy = Accuracy(task='multiclass', num_classes=num_classes)
-precision = Precision(task='multiclass', num_classes=num_classes)
-recall = Recall(task='multiclass', num_classes=num_classes)
-f1 = F1Score(task='multiclass', num_classes=num_classes)
-conf_matrix = ConfusionMatrix(task='multiclass', num_classes=num_classes)
-
-# Calcular métricas
-acc_value = accuracy(all_preds, all_labels).item()
-prec_value = precision(all_preds, all_labels).item()
-rec_value = recall(all_preds, all_labels).item()
-f1_value = f1(all_preds, all_labels).item()
-conf_matrix_value = conf_matrix(all_preds, all_labels).cpu().numpy()
-
-# Exibir resultados
-print(f"Acurácia: {acc_value:.4f}")
-print(f"Precisão: {prec_value:.4f}")
-print(f"Recall: {rec_value:.4f}")
-print(f"F1-Score: {f1_value:.4f}")
-
-# Exibir e salvar matriz de confusão
+# Exibir e salvar a matriz de confusão
+conf_matrix_path = os.path.join(conf_matrix_dir, f"mc_{hyperparams['RUN_NAME']}.png")
 def plot_confusion_matrix(cm, save_path):
     plt.figure(figsize=(10, 7))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
@@ -158,6 +71,33 @@ def plot_confusion_matrix(cm, save_path):
     plt.savefig(save_path)
     plt.show()
 
-# Criar nome do arquivo usando hyperparams["CM_PATH"]
-conf_matrix_path = os.path.join(conf_matrix_dir, f"mc_{os.path.basename(hyperparams['CM_PATH'])}_{hyperparams['TMODEL']}_{hyperparams["RUN_NAME"]}.png")
 plot_confusion_matrix(conf_matrix_value, save_path=conf_matrix_path)
+
+# Identificar imagens classificadas incorretamente
+incorrect_samples = model.get_misclassified_samples()
+incorrect_samples = incorrect_samples[:3] if len(incorrect_samples) > 3 else incorrect_samples
+
+for i, (image_path, true_label, pred_label) in enumerate(incorrect_samples):
+    plt.figure(figsize=(10, 5))
+    
+    # Carregar a imagem original do dataset
+    image = Image.open(image_path)
+    plt.subplot(1, 2, 1)
+    plt.imshow(image)
+    plt.title(f"Errado: {pred_label}, Correto: {true_label}")
+    plt.axis("off")
+    
+    # Selecionar uma imagem do dataset da classe predita para comparação
+    reference_image_path = model.get_sample_from_class(pred_label)
+    reference_image = Image.open(reference_image_path)
+    plt.subplot(1, 2, 2)
+    plt.imshow(reference_image)
+    plt.title(f"Exemplo da Classe {pred_label}")
+    plt.axis("off")
+    
+    # Salvar a imagem no diretório de exemplos
+    erro_path = os.path.join(exemplos_dir, os.path.basename(image_path))
+    image.save(erro_path)
+    print(f"Imagem salva em: {erro_path}")
+    
+    plt.show()

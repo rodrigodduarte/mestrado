@@ -118,8 +118,7 @@ class CustomImageCSVModule_kf(pl.LightningDataModule):
 
         if stage == "test" or stage is None:
             self.test_ds = CustomImageWithFeaturesDataset(
-                data_dir=self.test_dir,
-                transform=self.image_transform
+                data_dir=self.test_dir
             )
             print(f"[Test] {len(self.test_ds)} exemplos para teste.")
 
