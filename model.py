@@ -38,7 +38,7 @@ class CustomModel(pl.LightningModule):
         self.learning_rate = learning_rate
         self.scale_factor = scale_factor
         self.drop_path_rate = drop_path_rate
-        self.num_classes = 15
+        self.num_classes = num_classes
         self.label_smoothing = label_smoothing
         self.optimizer_momentum = optimizer_momentum
         self.fn_loss = nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)
@@ -239,7 +239,7 @@ class CustomModel(pl.LightningModule):
         self.test_f1.reset()
         self.test_precision.reset()
         self.test_recall.reset()
-
+        
         # 🔹 Obter a matriz de confusão já acumulada pela métrica integrada
         conf_matrix_value = self.test_confusion_matrix.compute().cpu().numpy()
         self.test_confusion_matrix.reset()  # 🔹 Reseta a métrica para futuras execuções
