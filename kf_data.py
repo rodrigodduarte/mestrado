@@ -34,6 +34,20 @@ class CustomImageModule_kf(pl.LightningDataModule):
             v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
 
+        self._testimage_transform = v2.Compose([
+            v2.ToImage(),
+            v2.Resize(self.shape, interpolation=PIL.Image.BILINEAR, antialias=False),
+            v2.ToDtype(torch.uint8, scale=True),
+
+            v2.RandomHorizontalFlip(),
+            v2.RandomVerticalFlip(p=0.1),
+            v2.RandomErasing(p=0.25),
+            v2.RandAugment(num_ops=9, magnitude=5),
+
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
+
         self.kf = KFold(n_splits=self.n_splits, shuffle=True, random_state=42)  # Fixando a seed para garantir reprodutibilidade
 
     def setup(self, stage=None):
@@ -54,8 +68,14 @@ class CustomImageModule_kf(pl.LightningDataModule):
             print(f"[Fold {self.fold_idx + 1}] {len(train_indices)} exemplos para treino, {len(val_indices)} para validação.")
 
         if stage == "test" or stage is None:
-            self.test_ds = datasets.ImageFolder(root=self.test_dir, transform=v2.ToDtype(torch.uint8, scale=True))
+            self.test_transform = v2.Compose([
+                v2.ToImage(),
+                v2.Resize(self.shape, interpolation=PIL.Image.BILINEAR, antialias=False),
+                v2.ToDtype(torch.float32, scale=True),
+                v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            ])
 
+            self.test_ds = datasets.ImageFolder(root=self.test_dir, transform=self.test_transform)
             print(f"[Test] {len(self.test_ds)} exemplos para teste.")
 
     def train_dataloader(self):
