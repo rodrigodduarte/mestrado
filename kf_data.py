@@ -76,6 +76,7 @@ class CustomImageModule_kf(pl.LightningDataModule):
             ])
 
             self.test_ds = datasets.ImageFolder(root=self.test_dir, transform=self.test_transform)
+            self.num_classes = len(self.test_ds.classes) 
             print(f"[Test] {len(self.test_ds)} exemplos para teste.")
 
     def train_dataloader(self):
