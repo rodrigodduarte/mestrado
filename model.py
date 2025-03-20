@@ -107,9 +107,6 @@ class CustomModel(pl.LightningModule):
             self.model.classifier = self.sequential_layers
 
         if tmodel == "swint_t":
-            self.model = swin_t(weights=Swin_T_Weights.DEFAULT)
-            self.model.head = nn.Linear(in_features=768, out_features=self.num_classes, bias=True)
-        if tmodel == "swint_t":
             self.model_dim = 768
             self.model = swin_t(weights=Swin_T_Weights.DEFAULT)
             self.sequential_layers = nn.Sequential(
@@ -117,6 +114,7 @@ class CustomModel(pl.LightningModule):
                 nn.LayerNorm(self.model_dim, eps=1e-6, elementwise_affine=True),
                 )
             self.model.head = self.sequential_layers
+            
         if tmodel == "swint_s":
             self.model = swin_s(weights=Swin_S_Weights.DEFAULT)
             self.model.head = nn.Linear(in_features=768, out_features=self.num_classes, bias=True)
