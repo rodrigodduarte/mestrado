@@ -233,8 +233,7 @@ class CustomModel(pl.LightningModule):
         self.test_f1.reset()
         self.test_precision.reset()
         self.test_recall.reset()
-        
-        # Concatena todas as previsões e rótulos coletados durante o teste
+            # Concatena todas as previsões e rótulos coletados durante o teste
         all_preds = torch.cat(self.test_preds)
         all_labels = torch.cat(self.test_labels)
 
