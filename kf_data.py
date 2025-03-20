@@ -54,7 +54,7 @@ class CustomImageModule_kf(pl.LightningDataModule):
             print(f"[Fold {self.fold_idx + 1}] {len(train_indices)} exemplos para treino, {len(val_indices)} para validação.")
 
         if stage == "test" or stage is None:
-            self.test_ds = datasets.ImageFolder(root=self.test_dir, transform=self.image_transform)
+            self.test_ds = datasets.ImageFolder(root=self.test_dir)
 
             print(f"[Test] {len(self.test_ds)} exemplos para teste.")
 
