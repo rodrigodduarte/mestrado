@@ -47,7 +47,11 @@ data_module = CustomImageModule_kf(
 data_module.setup(stage='test')
 
 # Usar o Trainer para rodar o teste
-trainer = pl.Trainer(accelerator='gpu' if torch.cuda.is_available() else 'cpu')
+trainer = pl.Trainer(
+    accelerator=hyperparams['ACCELERATOR'],
+    devices=hyperparams['DEVICES'],
+    precision=hyperparams['PRECISION']
+)
 trainer.test(model, datamodule=data_module)
 
 # Calcular matriz de confusão
