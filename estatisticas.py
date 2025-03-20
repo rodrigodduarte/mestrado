@@ -1,4 +1,5 @@
 import torch
+from PIL import Image
 import numpy as np
 import random
 import matplotlib.pyplot as plt
@@ -88,27 +89,19 @@ incorrect_examples = incorrect_examples[:3] if len(incorrect_examples) > 3 else 
 # Exibir resultados
 print(f"Total de exemplos classificados incorretamente: {len(incorrect_indices)}")
 
-for i, (image, true_label, pred_label) in enumerate(incorrect_examples):
+for i, (image_path, true_label, pred_label) in enumerate(incorrect_examples):
     plt.figure(figsize=(10, 5))
     
-    # Plot da imagem incorretamente classificada
+    # Carregar a imagem original do dataset
+    image = Image.open(image_path)
     plt.subplot(1, 2, 1)
-    plt.imshow(image.permute(1, 2, 0))
+    plt.imshow(image)
     plt.title(f"Errado: {pred_label}, Correto: {true_label}")
     plt.axis("off")
     
-    # Selecionar um exemplo aleatório da classe predita para comparação
-    class_examples = [img for img, label, _ in incorrect_examples if label == pred_label]
-    if class_examples:
-        reference_image = random.choice(class_examples)
-        plt.subplot(1, 2, 2)
-        plt.imshow(reference_image.permute(1, 2, 0))
-        plt.title(f"Exemplo da Classe {pred_label}")
-        plt.axis("off")
-    
-    # Salvar a imagem incorretamente classificada
-    erro_path = os.path.join(exemplos_dir, os.path.basename(data_module.test_dataset.samples[incorrect_indices[i]][0]))
-    plt.savefig(erro_path)
+    # Salvar a imagem no diretório de exemplos
+    erro_path = os.path.join(exemplos_dir, os.path.basename(image_path))
+    image.save(erro_path)
     print(f"Imagem salva em: {erro_path}")
     
     plt.show()
