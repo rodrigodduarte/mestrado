@@ -4,8 +4,8 @@ TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swedish/test"
 PROJECT: "swedish_no_ensemble_kf"
 CHECKPOINT_PATH: "swedish_no_ensemble_kf_checkpoints_config_train"
 NAME_DATASET: "swedish"
-BEST_MODEL_PATH: /Documentos/projeto/swedish_bestmodel/desert-sweep-4/best_model.ckpt
-RUN_NAME: desert-sweep-4
+BEST_MODEL_PATH: /Documentos/projeto/swedish_bestmodel/desert-sweep-11/best_model.ckpt
+RUN_NAME: desert-sweep-11
 CM_PATH: /home/rodrigoduarte/Documentos/projeto/matriz_de_confusao
 
 
