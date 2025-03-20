@@ -107,7 +107,7 @@ for i, (image, true_label, pred_label) in enumerate(incorrect_examples):
         plt.axis("off")
     
     # Salvar a imagem incorretamente classificada
-    erro_path = os.path.join(exemplos_dir, f"exemplo_errado_{i}.png")
+    erro_path = os.path.join(exemplos_dir, f"{true_label}_pred_{pred_label}.png")
     plt.savefig(erro_path)
     print(f"Imagem salva em: {erro_path}")
     
