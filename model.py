@@ -239,7 +239,7 @@ class CustomModel(pl.LightningModule):
         self.test_f1.reset()
         self.test_precision.reset()
         self.test_recall.reset()
-        
+
         # 🔹 Obter a matriz de confusão já acumulada pela métrica integrada
         conf_matrix_value = self.test_confusion_matrix.compute().cpu().numpy()
         self.test_confusion_matrix.reset()  # 🔹 Reseta a métrica para futuras execuções
