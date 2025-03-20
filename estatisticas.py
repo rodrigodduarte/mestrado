@@ -62,8 +62,19 @@ all_preds = []
 all_labels = []
 all_images = []
 
+# Avaliação do modelo
+all_preds = []
+all_labels = []
+all_image_paths = []
+
 with torch.no_grad():
-    for images, labels in test_loader:
+    for batch in test_loader:
+        if len(batch) == 3:  # Se paths estiver incluso
+            images, labels, paths = batch  
+        else:  # Se paths NÃO estiver incluso, usamos apenas imagens e labels
+            images, labels = batch
+            paths = [None] * len(labels)  # Criamos uma lista vazia de paths
+
         images = images.to(device)
         labels = labels.to(device)
 
@@ -72,7 +83,10 @@ with torch.no_grad():
 
         all_preds.extend(preds.cpu().numpy())
         all_labels.extend(labels.cpu().numpy())
-        all_images.extend(images.cpu())
+        all_image_paths.extend(paths)  # Pode conter Nones se paths não existir
+
+# Garantir que `all_image_paths` contenha apenas strings válidas
+all_image_paths = [p if p is not None else "desconhecido" for p in all_image_paths]
 
 # Converter para tensores
 all_preds = torch.tensor(all_preds)
