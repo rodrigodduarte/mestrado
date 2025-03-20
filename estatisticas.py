@@ -57,27 +57,19 @@ data_module.setup(stage='test')
 trainer = pl.Trainer(accelerator='gpu' if torch.cuda.is_available() else 'cpu')
 results = trainer.test(model, datamodule=data_module)
 
-# Calcular a matriz de confusão a partir do modelo
-conf_matrix_value = model.on_test_epoch_end()
+# Obter previsões e rótulos do modelo
+all_preds = model.test_preds.cpu().numpy()
+all_labels = model.test_labels.cpu().numpy()
+all_image_paths = model.test_image_paths
 
-# Exibir e salvar a matriz de confusão
-conf_matrix_path = os.path.join(conf_matrix_dir, f"mc_{hyperparams['RUN_NAME']}.png")
-def plot_confusion_matrix(cm, save_path):
-    plt.figure(figsize=(10, 7))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
-    plt.xlabel('Predito')
-    plt.ylabel('Real')
-    plt.title('Matriz de Confusão')
-    plt.savefig(save_path)
-    plt.show()
+# Identificar exemplos classificados incorretamente
+incorrect_indices = np.where(all_preds != all_labels)[0]
+incorrect_examples = [(all_image_paths[i], all_labels[i], all_preds[i]) for i in incorrect_indices]
 
-plot_confusion_matrix(conf_matrix_value, save_path=conf_matrix_path)
+# Selecionar no máximo 3 exemplos incorretos
+incorrect_examples = incorrect_examples[:3] if len(incorrect_examples) > 3 else incorrect_examples
 
-# Identificar imagens classificadas incorretamente
-incorrect_samples = model.get_misclassified_samples()
-incorrect_samples = incorrect_samples[:3] if len(incorrect_samples) > 3 else incorrect_samples
-
-for i, (image_path, true_label, pred_label) in enumerate(incorrect_samples):
+for i, (image_path, true_label, pred_label) in enumerate(incorrect_examples):
     plt.figure(figsize=(10, 5))
     
     # Carregar a imagem original do dataset
@@ -87,14 +79,17 @@ for i, (image_path, true_label, pred_label) in enumerate(incorrect_samples):
     plt.title(f"Errado: {pred_label}, Correto: {true_label}")
     plt.axis("off")
     
-    # Selecionar uma imagem do dataset da classe predita para comparação
-    reference_image_path = model.get_sample_from_class(pred_label)
-    reference_image = Image.open(reference_image_path)
-    plt.subplot(1, 2, 2)
-    plt.imshow(reference_image)
-    plt.title(f"Exemplo da Classe {pred_label}")
-    plt.axis("off")
-    
+    # Selecionar uma imagem correta da classe predita
+    class_samples = [p for p, l in zip(all_image_paths, all_labels) if l == pred_label]
+    reference_image_path = random.choice(class_samples) if class_samples else None
+
+    if reference_image_path:
+        reference_image = Image.open(reference_image_path)
+        plt.subplot(1, 2, 2)
+        plt.imshow(reference_image)
+        plt.title(f"Exemplo da Classe {pred_label}")
+        plt.axis("off")
+
     # Salvar a imagem no diretório de exemplos
     erro_path = os.path.join(exemplos_dir, os.path.basename(image_path))
     image.save(erro_path)
