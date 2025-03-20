@@ -8,17 +8,19 @@ import random
 from sklearn.model_selection import KFold
 from dataset import CustomImageWithFeaturesDataset
 from torch.utils.data import Dataset
+from torchvision.transforms import ToTensor
 
 class CustomDatasetWithPaths(Dataset):
     def __init__(self, image_folder):
         self.dataset = image_folder
         self.samples = image_folder.samples  # Contém os caminhos das imagens
+        self.transform = ToTensor()  # 🔹 Apenas converte PIL Image para Tensor
 
     def __getitem__(self, index):
         image_path, label = self.samples[index]
-        image = self.dataset.loader(image_path)
-        image = self.dataset.transform(image)
-        return image, label, image_path  # 🔹 Retornar também o caminho da imagem
+        image = self.dataset.loader(image_path)  # 🔹 Carrega a imagem original
+        image = self.transform(image)  # 🔹 Converte para tensor (sem normalização ou resize)
+        return image, label, image_path  # 🔹 Retorna também o caminho da imagem
 
     def __len__(self):
         return len(self.dataset)
