@@ -48,13 +48,13 @@ def train_model(config=None):
             tmodel=hyperparams["TMODEL"],
             name_dataset= hyperparams["NAME_DATASET"],
             epochs=hyperparams['MAX_EPOCHS'],
-            shape=hyperparams["SHAPE"],                             
-            learning_rate=float(config_sweep.learning_rate),      
-            scale_factor=hyperparams['SCALE_FACTOR'],       
-            drop_path_rate=config_sweep.drop_path_rate,   
-            num_classes=hyperparams['NUM_CLASSES'],         
+            shape=hyperparams["SHAPE"],                              # Fixo
+            learning_rate=float(config_sweep.learning_rate),       # Variável do sweep
+            scale_factor=hyperparams['SCALE_FACTOR'],       # Fixo
+            drop_path_rate=config_sweep.drop_path_rate,   # Fixo
+            num_classes=hyperparams['NUM_CLASSES'],         # Fixo
             label_smoothing=config_sweep.label_smoothing,
-            optimizer_momentum=(config_sweep.optimizer_momentum, 0.999)  
+            optimizer_momentum=(config_sweep.optimizer_momentum, 0.999)  # Fixo
         )
         
         stop_all_folds_callback = EarlyStopCallback(metric_name="val_loss", threshold=0.7, target_epoch=4)
@@ -162,7 +162,7 @@ def train_model(config=None):
             print(f"Erro ao deletar {best_checkpoint_dir}: {e}")
     else:
         print(f"O diretório {best_checkpoint_dir} não existe, nada a remover.")
-
+        
     wandb.finish()
 
 if __name__ == "__main__":
@@ -184,13 +184,13 @@ if __name__ == "__main__":
         'method': 'random',
         'metric': {'name': 'val_loss', 'goal': 'minimize'},
         'parameters': {
-            'learning_rate': {'min': 0.00018973, 'max': 0.00018974, 'distribution': 'uniform'},
+            'learning_rate': {'min': 0.00016246, 'max':0.00016247, 'distribution': 'uniform'},
             'weight_decay': {'min': 4.4776e-7, 'max': 4.4777e-7, 'distribution': 'uniform'},
-            'optimizer_momentum': {'min': 0.93112, 'max': 0.93113, 'distribution': 'uniform'},
-            'mlp_vector_model_scale': {'min': 0.99277, 'max': 0.99278, 'distribution': 'uniform'},
-            'layer_scale': {'min': 1.20865, 'max': 1.20866, 'distribution': 'uniform'},
-            'drop_path_rate': {'min': 0.42349, 'max': 0.42350, 'distribution': 'uniform'},
-            'label_smoothing': {'min': 0.0010509, 'max': 0.0010510, 'distribution': 'uniform'}
+            'optimizer_momentum': {'min': 0.9257, 'max': 0.9258, 'distribution': 'uniform'},
+            'mlp_vector_model_scale': {'min': 1.07551, 'max': 1.07552, 'distribution': 'uniform'},
+            'layer_scale': {'min': 0.93523, 'max': 0.93524, 'distribution': 'uniform'},
+            'drop_path_rate': {'min': 0.11709, 'max': 0.11710, 'distribution': 'uniform'},
+            'label_smoothing': {'min': 0.011871, 'max': 0.011872, 'distribution': 'uniform'}
         }
     }
     sweep_id = wandb.sweep(sweep_config, project=load_hyperparameters('config2.yaml')["PROJECT"])
