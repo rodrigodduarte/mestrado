@@ -314,6 +314,9 @@ class CustomEnsembleModel(pl.LightningModule):
         self.val_recall = Recall(task="multiclass", num_classes=num_classes)
         self.test_recall = Recall(task="multiclass", num_classes=num_classes)
 
+        self.test_confusion_matrix = MulticlassConfusionMatrix(num_classes=num_classes)
+
+
 
         # self.dl_model = models.convnext_tiny(weights=ConvNeXt_Tiny_Weights.DEFAULT, 
         #                                 drop_path_rate=self.drop_path_rate)
@@ -433,7 +436,7 @@ class CustomEnsembleModel(pl.LightningModule):
         conf_matrix_value = self.test_confusion_matrix.compute().cpu().numpy()
         self.test_confusion_matrix.reset()  # 🔹 Reseta a métrica para futuras execuções
 
-        print("✅ Matriz de Confusão calculada após o teste.")
+        print("Matriz de Confusão calculada após o teste.")
 
         return conf_matrix_value
 
