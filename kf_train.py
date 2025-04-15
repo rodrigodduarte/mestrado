@@ -185,13 +185,13 @@ if __name__ == "__main__":
         'method': 'random',
         'metric': {'name': 'val_loss', 'goal': 'minimize'},
         'parameters': {
-            'learning_rate': {'min': 0.00018973, 'max': 0.00018974, 'distribution': 'uniform'},
+            'learning_rate': {'min': 0.00014997, 'max': 0.00014998, 'distribution': 'uniform'},
             'weight_decay': {'min': 4.4776e-7, 'max': 4.4777e-7, 'distribution': 'uniform'},
-            'optimizer_momentum': {'min': 0.93112, 'max': 0.93113, 'distribution': 'uniform'},
-            'mlp_vector_model_scale': {'min': 0.99277, 'max': 0.99278, 'distribution': 'uniform'},
-            'layer_scale': {'min': 1.20865, 'max': 1.20866, 'distribution': 'uniform'},
-            'drop_path_rate': {'min': 0.42348, 'max': 0.42349, 'distribution': 'uniform'},
-            'label_smoothing': {'min': 0.0010508, 'max': 0.0010509, 'distribution': 'uniform'}
+            'optimizer_momentum': {'min': 0.98135, 'max': 0.981366, 'distribution': 'uniform'},
+            'mlp_vector_model_scale': {'min': 1.16582, 'max': 1.16583, 'distribution': 'uniform'},
+            'layer_scale': {'min': 1.27079, 'max': 1.27080, 'distribution': 'uniform'},
+            'drop_path_rate': {'min': 0.040087, 'max': 0.040088, 'distribution': 'uniform'},
+            'label_smoothing': {'min': 0.08848, 'max': 0.08849, 'distribution': 'uniform'}
         }
     }
     sweep_id = wandb.sweep(sweep_config, project=load_hyperparameters('config.yaml')["PROJECT"])
