@@ -1,10 +1,10 @@
 # Caminhos dos diretórios de treino e teste
-TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/D2/train"
-TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/D2/test"
-PROJECT: "D2_ensemble_kf"
-CHECKPOINT_PATH: "D2_ensemble_kf_checkpoints_config_train"
-NAME_DATASET: "D2"
-BEST_MODEL_PATH: /Documentos/projeto/D2_bestmodel/visionary-sweep-2/best_model.ckpt
+TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/train"
+TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/test"
+PROJECT: "flavia_ensemble_kf"
+CHECKPOINT_PATH: "flavia_ensemble_kf_checkpoints_config_train"
+NAME_DATASET: "flavia"
+BEST_MODEL_PATH: /Documentos/projeto/flavia_bestmodel/visionary-sweep-2/best_model.ckpt
 RUN_NAME: visionary-sweep-2
 CM_PATH: /home/rodrigoduarte/Documentos/projeto/matriz_de_confusao
 
@@ -15,17 +15,17 @@ SHAPE: [224, 224]
 FEATURES_DIM: 648
 HIDDEN_LAYERS: 2
 HIDDEN_UNITS: 1296
-MAX_EPOCHS: 50  # Número de épocas por fold
-NUM_CLASSES: 44 #IMPORTANTE NAO ESQUECER DE MUDAR
+MAX_EPOCHS: 100  # Número de épocas por fold
+NUM_CLASSES: 32 #IMPORTANTE NAO ESQUECER DE MUDAR
 BATCH_SIZE: 64 
-LEARNING_RATE: 0.00016246
+LEARNING_RATE: 0.000143
 SCALE_FACTOR: 0.8
-DROP_PATH_RATE: 0.40165
-LABEL_SMOOTHING: 0.011871
-OPTIMIZER_MOMENTUM: 0.9257
-WEIGHT_DECAY: 4.6631e-7
-LAYER_SCALE: 0.93523
-MLP_VECTOR_MODEL_SCALE: 1.07551
+DROP_PATH_RATE: 0.031118
+LABEL_SMOOTHING: 0.1981
+OPTIMIZER_MOMENTUM: 0.98714
+WEIGHT_DECAY: 2.0445e-7
+LAYER_SCALE: 0.67973
+MLP_VECTOR_MODEL_SCALE: 1.26636
 K_FOLDS: 5  # Número de folds na validação cruzada
 
 # Configurações de hardware e execução
