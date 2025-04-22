@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import DataLoader, random_split, Dataset, ConcatDataset
+from torch.utils.data import DataLoader, random_split, Dataset, ConcatDataset, Subset
 import pandas as pd
 import numpy as np
 from PIL import Image
@@ -16,6 +16,7 @@ import os
 from sklearn.preprocessing import LabelEncoder
 from sklearn import preprocessing
 from sklearn.model_selection import KFold
+
 
 
 class CustomImageModule(pl.LightningDataModule):
@@ -443,5 +444,64 @@ class CustomImageCSVModule_kf(pl.LightningDataModule):
     def val_dataloader(self):
         return DataLoader(self.val_ds, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
     
+    def test_dataloader(self):
+        return DataLoader(self.test_ds, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
+
+
+class CustomImageModule_kf(pl.LightningDataModule):
+    def __init__(self, train_dir, test_dir, shape, batch_size, num_workers, n_splits=5, fold_idx=0):
+        super().__init__()
+        self.train_dir = train_dir
+        self.test_dir = test_dir
+        self.shape = shape
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.n_splits = n_splits
+        self.fold_idx = fold_idx
+
+        self.image_transform = v2.Compose([
+            v2.ToImage(),
+            v2.Resize(self.shape, interpolation=PIL.Image.BILINEAR, antialias=False),
+            v2.ToDtype(torch.uint8, scale=True),
+
+            # Geometric & Color transformations
+            v2.RandomHorizontalFlip(p=0.1),
+            v2.RandomVerticalFlip(p=0.1),
+            v2.RandomRotation(degrees=30),
+            v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+            v2.RandomApply([v2.Grayscale(num_output_channels=3)], p=0.1),
+            v2.RandomApply([v2.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 2.0))], p=0.2),
+            v2.RandomErasing(p=0.25, scale=(0.02, 0.1), ratio=(0.3, 3.3)),
+            v2.RandomPerspective(distortion_scale=0.2, p=0.2),
+            v2.RandAugment(num_ops=9, magnitude=5),
+
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+
+        self.kf = KFold(n_splits=self.n_splits, shuffle=True, random_state=42)
+
+    def setup(self, stage=None):
+        if stage == 'fit' or stage is None:
+            full_dataset = datasets.ImageFolder(root=self.train_dir, transform=self.image_transform)
+            indices = list(range(len(full_dataset)))
+            splits = list(self.kf.split(indices))
+
+            if self.fold_idx >= len(splits):
+                raise ValueError(f"Fold index {self.fold_idx} fora do intervalo permitido.")
+
+            train_idx, val_idx = splits[self.fold_idx]
+            self.train_ds = Subset(full_dataset, train_idx)
+            self.val_ds = Subset(full_dataset, val_idx)
+
+        if stage == "test" or stage is None:
+            self.test_ds = datasets.ImageFolder(root=self.test_dir, transform=self.image_transform)
+
+    def train_dataloader(self):
+        return DataLoader(self.train_ds, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)
+
+    def val_dataloader(self):
+        return DataLoader(self.val_ds, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
+
     def test_dataloader(self):
         return DataLoader(self.test_ds, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
