@@ -14,7 +14,7 @@ from callbacks import (
     EarlyStopCallback
 )
 
-# Carregar hiperparâmetros do arquivo config.yaml
+# Carregar hiperparâmetros do arquivo config2.yaml
 def load_hyperparameters(file_path):
     with open(file_path, 'r') as file:
         hyperparams = yaml.safe_load(file)
@@ -30,7 +30,7 @@ def set_random_seeds():
 
 # Função principal para treinamento com validação cruzada
 def train_model():
-    hyperparams = load_hyperparameters('config.yaml')
+    hyperparams = load_hyperparameters('config2.yaml')
     k_splits = hyperparams['K_FOLDS']
     metrics_history = {}
 
@@ -61,7 +61,15 @@ def train_model():
             optimizer_momentum=(hyperparams['OPTIMIZER_MOMENTUM'], 0.999)  # Fixo
         )
 
-
+        data_module = CustomImageCSVModule_kf(
+            train_dir=hyperparams['TRAIN_DIR'],
+            test_dir=hyperparams['TEST_DIR'],
+            shape=hyperparams['SHAPE'],
+            batch_size=hyperparams['BATCH_SIZE'],
+            num_workers=hyperparams['NUM_WORKERS'],
+            n_splits=k_splits,
+            fold_idx=fold
+        )
         data_module = CustomImageModule_kf(
             train_dir=hyperparams['TRAIN_DIR'],
             test_dir=hyperparams['TEST_DIR'],
