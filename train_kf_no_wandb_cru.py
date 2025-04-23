@@ -90,7 +90,7 @@ def train_model():
         trainer.fit(model, data_module)
 
         best_model_path = fold_callback.best_model_path
-        model = CustomEnsembleModel.load_from_checkpoint(best_model_path)
+        model = CustomModel.load_from_checkpoint(best_model_path)
         val_metrics = trainer.validate(model, data_module)[0]
         test_metrics = trainer.test(model, data_module)[0]
 

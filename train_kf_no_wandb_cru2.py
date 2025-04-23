@@ -61,15 +61,7 @@ def train_model():
             optimizer_momentum=(hyperparams['OPTIMIZER_MOMENTUM'], 0.999)  # Fixo
         )
 
-        data_module = CustomImageCSVModule_kf(
-            train_dir=hyperparams['TRAIN_DIR'],
-            test_dir=hyperparams['TEST_DIR'],
-            shape=hyperparams['SHAPE'],
-            batch_size=hyperparams['BATCH_SIZE'],
-            num_workers=hyperparams['NUM_WORKERS'],
-            n_splits=k_splits,
-            fold_idx=fold
-        )
+
         data_module = CustomImageModule_kf(
             train_dir=hyperparams['TRAIN_DIR'],
             test_dir=hyperparams['TEST_DIR'],
@@ -98,7 +90,7 @@ def train_model():
         trainer.fit(model, data_module)
 
         best_model_path = fold_callback.best_model_path
-        model = CustomEnsembleModel.load_from_checkpoint(best_model_path)
+        model = CustomModel.load_from_checkpoint(best_model_path)
         val_metrics = trainer.validate(model, data_module)[0]
         test_metrics = trainer.test(model, data_module)[0]
 
