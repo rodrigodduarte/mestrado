@@ -37,7 +37,7 @@ def train_model():
     run_dir = os.path.join("modelos_kf", f"{hyperparams['NAME_DATASET']}_{hyperparams['TMODEL']}_ne")
     os.makedirs(run_dir, exist_ok=True)
 
-    for fold in range(3, k_splits):
+    for fold in range(2, k_splits):
         print(f"\n==================== Fold {fold+1}/{k_splits} ====================")
 
         fold_callback = ModelCheckpoint(
