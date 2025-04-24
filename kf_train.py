@@ -47,7 +47,7 @@ def train_model(config=None):
                 
         wandb_logger = WandbLogger(project=hyperparams["PROJECT"])
         
-        for fold in range(k_splits):
+        for fold in range(1):
 
             print(f"\n==================== Fold {fold+1}/{k_splits} ====================")
 
