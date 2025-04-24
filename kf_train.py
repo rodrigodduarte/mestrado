@@ -132,32 +132,20 @@ def train_model(config=None):
 
 if __name__ == "__main__":
     set_random_seeds()
-    # sweep_config = {
-    #     'method': 'random',
-    #     'metric': {'name': 'val_loss', 'goal': 'minimize'},
-    #     'parameters': {
-    #         'learning_rate': {'min': 6e-6, 'max': 1e-4, 'distribution': 'uniform'},
-    #         'weight_decay': {'min': 1e-7, 'max': 1e-6, 'distribution': 'uniform'},
-    #         'optimizer_momentum': {'min': 0.92, 'max': 0.99, 'distribution': 'uniform'},
-    #         'mlp_vector_model_scale': {'min': 0.8, 'max': 1.3, 'distribution': 'uniform'},
-    #         'layer_scale': {'min': 0.75, 'max': 3, 'distribution': 'uniform'},
-    #         'drop_path_rate': {'min': 0.0, 'max': 0.5, 'distribution': 'uniform'},
-    #         'label_smoothing': {'min': 0.0, 'max': 0.2, 'distribution': 'uniform'}
-    #     }
-    # }
     sweep_config = {
         'method': 'random',
         'metric': {'name': 'val_loss', 'goal': 'minimize'},
         'parameters': {
-            'learning_rate': {'min': 1e-5, 'max': 5e-4, 'distribution': 'log_uniform_values'},
+            'learning_rate': {'min': 1e-5, 'max': 1e-4, 'distribution': 'log_uniform_values'},
             'weight_decay': {'min': 1e-6, 'max': 1e-3, 'distribution': 'log_uniform_values'},
-            'optimizer_momentum': {'min': 0.85, 'max': 0.99, 'distribution': 'uniform'},
-            'mlp_vector_model_scale': {'min': 0.7, 'max': 1.5, 'distribution': 'uniform'},
-            'layer_scale': {'min': 0.7, 'max': 1.5, 'distribution': 'uniform'},
-            'drop_path_rate': {'min': 0.0, 'max': 0.4, 'distribution': 'uniform'},
+            'optimizer_momentum': {'min': 0.92, 'max': 0.99, 'distribution': 'uniform'},
+            'mlp_vector_model_scale': {'min': 0.8, 'max': 1.3, 'distribution': 'uniform'},
+            'layer_scale': {'min': 0.75, 'max': 3, 'distribution': 'uniform'},
+            'drop_path_rate': {'min': 0.0, 'max': 0.5, 'distribution': 'uniform'},
             'label_smoothing': {'min': 0.0, 'max': 0.2, 'distribution': 'uniform'}
         }
     }
+
     sweep_id = wandb.sweep(sweep_config, project=load_hyperparameters('config.yaml')["PROJECT"])
     wandb.agent(sweep_id, function=train_model, count=200)
     wandb.finish()
