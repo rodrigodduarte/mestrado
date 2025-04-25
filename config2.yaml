@@ -1,10 +1,10 @@
 # Caminhos dos diretórios de treino e teste
-TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swwedish/train"
-TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swwedish/test"
-PROJECT: "swwedish_ensemble_kf"
-CHECKPOINT_PATH: "swwedish_ensemble_kf_checkpoints_config_train"
-NAME_DATASET: "swwedish"
-BEST_MODEL_PATH: /Documentos/projeto/swwedish_bestmodel/visionary-sweep-2/best_model.ckpt
+TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swedish/train"
+TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swedish/test"
+PROJECT: "swedish_ensemble_kf"
+CHECKPOINT_PATH: "swedish_ensemble_kf_checkpoints_config_train"
+NAME_DATASET: "swedish"
+BEST_MODEL_PATH: /Documentos/projeto/swedish_bestmodel/visionary-sweep-2/best_model.ckpt
 RUN_NAME: visionary-sweep-2
 CM_PATH: /home/rodrigoduarte/Documentos/projeto/matriz_de_confusao
 
