@@ -1,7 +1,7 @@
 # Caminhos dos diretórios de treino e teste
 TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/train"
 TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/test"
-PROJECT: "flavia_ensemble_kf"
+PROJECT: "flavia_kf"
 CHECKPOINT_PATH: "flavia_ensemble_kf_checkpoints_config_train"
 NAME_DATASET: "flavia"
 BEST_MODEL_PATH: /Documentos/projeto/flavia_bestmodel/visionary-sweep-2/best_model.ckpt
