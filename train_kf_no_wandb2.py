@@ -92,6 +92,12 @@ def train_model():
         trainer.fit(model, data_module)
 
         best_model_path = fold_callback.best_model_path
+
+        # Novo trecho: carregar epoch do melhor modelo
+        checkpoint_data = torch.load(best_model_path, map_location='cpu')
+        best_epoch = checkpoint_data['epoch']
+        print(f"Melhor modelo para fold {fold} salvo na época {best_epoch}")
+
         model = CustomEnsembleModel.load_from_checkpoint(best_model_path)
         val_metrics = trainer.validate(model, data_module)[0]
         test_metrics = trainer.test(model, data_module)[0]
@@ -105,6 +111,10 @@ def train_model():
             if metric_name not in metrics_history:
                 metrics_history[metric_name] = []
             metrics_history[metric_name].append(metric_value)
+
+        # Limpar modelo da GPU ao final do fold
+        del model
+        torch.cuda.empty_cache()
 
     print("\n==================== Métricas Finais ====================")
     for metric_name, values in metrics_history.items():
