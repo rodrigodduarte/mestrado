@@ -41,9 +41,9 @@ acc_list = []
 prec_list = []
 rec_list = []
 f1_list = []
-
-# Dicionário para salvar os resultados por fold
+loss_list = []
 fold_metrics = {}
+
 
 for fold_idx in range(hyperparams['K_FOLDS']):
     model_filename = f"fold_{fold_idx}_best_model.ckpt"
@@ -72,14 +72,25 @@ for fold_idx in range(hyperparams['K_FOLDS']):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
+    criterion = torch.nn.CrossEntropyLoss()
     all_preds, all_labels = [], []
+    total_loss = 0.0
+    total_samples = 0
+
     with torch.no_grad():
         for images, features, labels in test_loader:
             images, features, labels = images.to(device), features.to(device), labels.to(device)
             outputs = model(images, features)
+            loss = criterion(outputs, labels)
+            total_loss += loss.item() * images.size(0)
+            total_samples += images.size(0)
+
             preds = torch.argmax(outputs, dim=1)
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
+
+    avg_test_loss = total_loss / total_samples
+    loss_list.append(avg_test_loss)
 
     all_preds = torch.tensor(all_preds)
     all_labels = torch.tensor(all_labels)
@@ -106,10 +117,11 @@ for fold_idx in range(hyperparams['K_FOLDS']):
         'acc': acc_value,
         'prec': prec_value,
         'rec': rec_value,
-        'f1': f1_value
+        'f1': f1_value,
+        'loss': avg_test_loss
     }
 
-    print(f"[Fold {fold_idx}] Acurácia: {acc_value:.4f} | Precisão: {prec_value:.4f} | Recall: {rec_value:.4f} | F1: {f1_value:.4f}")
+    print(f"[Fold {fold_idx}] Acurácia: {acc_value:.4f} | Precisão: {prec_value:.4f} | Recall: {rec_value:.4f} | Test Loss: {avg_test_loss:.4f}")
 
     matrix_filename = model_filename.replace(".ckpt", ".png")
     matrix_path = os.path.join(model_base_dir, matrix_filename)
@@ -127,6 +139,7 @@ mean_acc, std_acc = print_final_stats(acc_list, "Acurácia")
 mean_prec, std_prec = print_final_stats(prec_list, "Precisão")
 mean_rec, std_rec = print_final_stats(rec_list, "Recall")
 mean_f1, std_f1 = print_final_stats(f1_list, "F1-score")
+mean_loss, std_loss = print_final_stats(loss_list, "Test Loss")
 
 # Salvar estatísticas finais em arquivo .txt
 stats_filename = f"{hyperparams['NAME_DATASET']}_{hyperparams['TMODEL']}_resultados.txt"
@@ -139,9 +152,11 @@ with open(stats_path, 'w') as f:
         f.write(f"  Precisão: {metrics['prec']:.4f}\n")
         f.write(f"  Recall:   {metrics['rec']:.4f}\n")
         f.write(f"  F1-score: {metrics['f1']:.4f}\n\n")
+        f.write(f"  Test Loss: {metrics['loss']:.6f}\n\n")
 
     f.write("=== Métricas Finais ===\n")
     f.write(f"Acurácia: Média={mean_acc:.4f}, Desvio={std_acc:.4f}\n")
     f.write(f"Precisão: Média={mean_prec:.4f}, Desvio={std_prec:.4f}\n")
     f.write(f"Recall:   Média={mean_rec:.4f}, Desvio={std_rec:.4f}\n")
     f.write(f"F1-score: Média={mean_f1:.4f}, Desvio={std_f1:.4f}\n")
+    f.write(f"Test Loss: Média={mean_loss:.6f}, Desvio={std_loss:.6f}\n")
