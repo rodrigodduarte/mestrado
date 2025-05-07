@@ -10,13 +10,13 @@ CM_PATH: /home/rodrigoduarte/Documentos/projeto/matriz_de_confusao
 
 
 # Hiperparâmetros relacionados à configuração do modelo
-TMODEL: "convnext_t"
+TMODEL: "swint_t"
 SHAPE: [224, 224]
 FEATURES_DIM: 648
 HIDDEN_LAYERS: 2
 HIDDEN_UNITS: 1296
 SCALE_FACTOR: 0.8
-MAX_EPOCHS: 100 # Número de épocas por fold
+MAX_EPOCHS: 50 # Número de épocas por fold
 NUM_CLASSES: 15 #IMPORTANTE NAO ESQUECER DE MUDAR
 BATCH_SIZE: 64 
 LEARNING_RATE: 0.000020421
