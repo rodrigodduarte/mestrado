@@ -37,7 +37,7 @@ def train_model():
     final_model_dir = os.path.join(run_dir, "final_best_models")
     os.makedirs(final_model_dir, exist_ok=True)
 
-    for fold in range(k_splits):
+    for fold in range(1):
         print(f"\n==================== Fold {fold+1}/{k_splits} ====================")
 
         fold_callback = ModelCheckpoint(
