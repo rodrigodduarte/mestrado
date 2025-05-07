@@ -34,7 +34,7 @@ def plot_confusion_matrix(cm, save_path, title='Matriz de Confusão'):
 set_random_seeds()
 hyperparams = load_hyperparameters()
 
-model_base_dir = os.path.join("modelos_kf", f"{hyperparams['NAME_DATASET']}_{hyperparams['TMODEL']}_ne")
+model_base_dir = os.path.join("modelos_kf", f"{hyperparams['NAME_DATASET']}_{hyperparams['TMODEL']}")
 
 # Listas para armazenar as métricas de todos os folds
 acc_list = []
@@ -74,9 +74,9 @@ for fold_idx in range(hyperparams['K_FOLDS']):
 
     all_preds, all_labels = [], []
     with torch.no_grad():
-        for images, labels in test_loader:
-            images, labels = images.to(device), labels.to(device)
-            outputs = model(images)
+        for images, features, labels in test_loader:
+            images, features, labels = images.to(device), features.to(device), labels.to(device)
+            outputs = model(images, features)
             preds = torch.argmax(outputs, dim=1)
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
@@ -129,7 +129,7 @@ mean_rec, std_rec = print_final_stats(rec_list, "Recall")
 mean_f1, std_f1 = print_final_stats(f1_list, "F1-score")
 
 # Salvar estatísticas finais em arquivo .txt
-stats_filename = f"{hyperparams['NAME_DATASET']}_{hyperparams['TMODEL']}_ne_resultados.txt"
+stats_filename = f"{hyperparams['TMODEL']}_resultados.txt"
 stats_path = os.path.join(model_base_dir, stats_filename)
 
 with open(stats_path, 'w') as f:
