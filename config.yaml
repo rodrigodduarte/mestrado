@@ -1,16 +1,16 @@
 # Caminhos dos diretórios de treino e teste
-TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/train"
-TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/test"
-PROJECT: "flavia_kf"
-CHECKPOINT_PATH: "flavia_ensemble_kf_checkpoints_config_train"
-NAME_DATASET: "flavia"
-BEST_MODEL_PATH: /Documentos/projeto/flavia_bestmodel/visionary-sweep-2/best_model.ckpt
+TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swedish/train"
+TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swedish/test"
+PROJECT: "swedish_kf"
+CHECKPOINT_PATH: "swedish_ensemble_kf_checkpoints_config_train"
+NAME_DATASET: "swedish"
+BEST_MODEL_PATH: /Documentos/projeto/swedish_bestmodel/visionary-sweep-2/best_model.ckpt
 RUN_NAME: visionary-sweep-2
 CM_PATH: /home/rodrigoduarte/Documentos/projeto/matriz_de_confusao
 
 
 # Hiperparâmetros relacionados à configuração do modelo
-TMODEL: "swint_t"
+TMODEL: "convnext_t"
 SHAPE: [224, 224]
 FEATURES_DIM: 648
 HIDDEN_LAYERS: 2
