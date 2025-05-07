@@ -34,10 +34,17 @@ def plot_confusion_matrix(cm, save_path, title='Matriz de Confusão'):
 set_random_seeds()
 hyperparams = load_hyperparameters()
 
-# Diretório padrão onde os modelos foram salvos durante o treinamento
 model_base_dir = os.path.join("modelos_kf", f"{hyperparams['NAME_DATASET']}_{hyperparams['TMODEL']}_ne")
 
-# Avaliar cada modelo de cada fold
+# Listas para armazenar as métricas de todos os folds
+acc_list = []
+prec_list = []
+rec_list = []
+f1_list = []
+
+# Dicionário para salvar os resultados por fold
+fold_metrics = {}
+
 for fold_idx in range(hyperparams['K_FOLDS']):
     model_filename = f"fold_{fold_idx}_best_model.ckpt"
     model_path = os.path.join(model_base_dir, model_filename)
@@ -90,9 +97,51 @@ for fold_idx in range(hyperparams['K_FOLDS']):
     f1_value = f1(all_preds, all_labels).item()
     conf_matrix_value = conf_matrix(all_preds, all_labels).cpu().numpy()
 
+    acc_list.append(acc_value)
+    prec_list.append(prec_value)
+    rec_list.append(rec_value)
+    f1_list.append(f1_value)
+
+    fold_metrics[fold_idx] = {
+        'acc': acc_value,
+        'prec': prec_value,
+        'rec': rec_value,
+        'f1': f1_value
+    }
+
     print(f"[Fold {fold_idx}] Acurácia: {acc_value:.4f} | Precisão: {prec_value:.4f} | Recall: {rec_value:.4f} | F1: {f1_value:.4f}")
 
-    # Salvar a matriz de confusão no mesmo diretório do modelo
     matrix_filename = model_filename.replace(".ckpt", ".png")
     matrix_path = os.path.join(model_base_dir, matrix_filename)
     plot_confusion_matrix(conf_matrix_value, save_path=matrix_path, title=f"Matriz de Confusão - Fold {fold_idx}")
+
+# Exibir e salvar métricas médias ao final
+def print_final_stats(metric_list, name):
+    metric_array = np.array(metric_list)
+    print(f"{name} por Fold: {metric_array}")
+    print(f"{name} Média: {metric_array.mean():.4f} | Desvio Padrão: {metric_array.std():.4f}\n")
+    return metric_array.mean(), metric_array.std()
+
+print("\n=== Estatísticas Finais ===")
+mean_acc, std_acc = print_final_stats(acc_list, "Acurácia")
+mean_prec, std_prec = print_final_stats(prec_list, "Precisão")
+mean_rec, std_rec = print_final_stats(rec_list, "Recall")
+mean_f1, std_f1 = print_final_stats(f1_list, "F1-score")
+
+# Salvar estatísticas finais em arquivo .txt
+stats_filename = f"{hyperparams['NAME_DATASET']}_{hyperparams['TMODEL']}_ne_resultados.txt"
+stats_path = os.path.join(model_base_dir, stats_filename)
+
+with open(stats_path, 'w') as f:
+    for fold, metrics in fold_metrics.items():
+        f.write(f"Fold {fold}:\n")
+        f.write(f"  Acurácia: {metrics['acc']:.4f}\n")
+        f.write(f"  Precisão: {metrics['prec']:.4f}\n")
+        f.write(f"  Recall:   {metrics['rec']:.4f}\n")
+        f.write(f"  F1-score: {metrics['f1']:.4f}\n\n")
+
+    f.write("=== Métricas Finais ===\n")
+    f.write(f"Acurácia: Média={mean_acc:.4f}, Desvio={std_acc:.4f}\n")
+    f.write(f"Precisão: Média={mean_prec:.4f}, Desvio={std_prec:.4f}\n")
+    f.write(f"Recall:   Média={mean_rec:.4f}, Desvio={std_rec:.4f}\n")
+    f.write(f"F1-score: Média={mean_f1:.4f}, Desvio={std_f1:.4f}\n")
