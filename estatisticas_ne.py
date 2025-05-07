@@ -67,9 +67,9 @@ for fold_idx in range(hyperparams['K_FOLDS']):
 
     all_preds, all_labels = [], []
     with torch.no_grad():
-        for images, features, labels in test_loader:
-            images, features, labels = images.to(device), features.to(device), labels.to(device)
-            outputs = model(images, features)
+        for images, labels in test_loader:
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images)
             preds = torch.argmax(outputs, dim=1)
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
