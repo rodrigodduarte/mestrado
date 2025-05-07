@@ -1,23 +1,23 @@
 # Caminhos dos diretórios de treino e teste
-TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swedish/train"
-TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swedish/test"
-PROJECT: "swedish_kf"
-CHECKPOINT_PATH: "swedish_ensemble_kf_checkpoints_config_train"
-NAME_DATASET: "swedish"
-BEST_MODEL_PATH: /Documentos/projeto/swedish_bestmodel/visionary-sweep-2/best_model.ckpt
+TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/D2/train"
+TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/D2/test"
+PROJECT: "D2_kf"
+CHECKPOINT_PATH: "D2_ensemble_kf_checkpoints_config_train"
+NAME_DATASET: "D2"
+BEST_MODEL_PATH: /Documentos/projeto/D2_bestmodel/visionary-sweep-2/best_model.ckpt
 RUN_NAME: visionary-sweep-2
 CM_PATH: /home/rodrigoduarte/Documentos/projeto/matriz_de_confusao
 
 
 # Hiperparâmetros relacionados à configuração do modelo
-TMODEL: "swint_t"
+TMODEL: "convnext_t"
 SHAPE: [224, 224]
 FEATURES_DIM: 648
 HIDDEN_LAYERS: 2
 HIDDEN_UNITS: 1296
 SCALE_FACTOR: 0.8
 MAX_EPOCHS: 50 # Número de épocas por fold
-NUM_CLASSES: 15 #IMPORTANTE NAO ESQUECER DE MUDAR
+NUM_CLASSES: 44 #IMPORTANTE NAO ESQUECER DE MUDAR
 BATCH_SIZE: 64 
 LEARNING_RATE: 0.000020421
 DROP_PATH_RATE: 0.2251
