@@ -129,7 +129,7 @@ mean_rec, std_rec = print_final_stats(rec_list, "Recall")
 mean_f1, std_f1 = print_final_stats(f1_list, "F1-score")
 
 # Salvar estatísticas finais em arquivo .txt
-stats_filename = f"{hyperparams['TMODEL']}_resultados.txt"
+stats_filename = f"{hyperparams['NAME_DATASET']}_{hyperparams['TMODEL']}_resultados.txt"
 stats_path = os.path.join(model_base_dir, stats_filename)
 
 with open(stats_path, 'w') as f:
