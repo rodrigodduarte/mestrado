@@ -36,13 +36,11 @@ hyperparams = load_hyperparameters()
 
 model_base_dir = os.path.join("modelos_kf", f"{hyperparams['NAME_DATASET']}_{hyperparams['TMODEL']}_ne")
 
-# Listas para armazenar as métricas de todos os folds
 acc_list = []
 prec_list = []
 rec_list = []
 f1_list = []
-
-# Dicionário para salvar os resultados por fold
+loss_list = []
 fold_metrics = {}
 
 for fold_idx in range(hyperparams['K_FOLDS']):
@@ -72,14 +70,25 @@ for fold_idx in range(hyperparams['K_FOLDS']):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
+    criterion = torch.nn.CrossEntropyLoss()
     all_preds, all_labels = [], []
+    total_loss = 0.0
+    total_samples = 0
+
     with torch.no_grad():
         for images, labels in test_loader:
             images, labels = images.to(device), labels.to(device)
             outputs = model(images)
+            loss = criterion(outputs, labels)
+            total_loss += loss.item() * images.size(0)
+            total_samples += images.size(0)
+
             preds = torch.argmax(outputs, dim=1)
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
+
+    avg_test_loss = total_loss / total_samples
+    loss_list.append(avg_test_loss)
 
     all_preds = torch.tensor(all_preds)
     all_labels = torch.tensor(all_labels)
@@ -106,16 +115,16 @@ for fold_idx in range(hyperparams['K_FOLDS']):
         'acc': acc_value,
         'prec': prec_value,
         'rec': rec_value,
-        'f1': f1_value
+        'f1': f1_value,
+        'loss': avg_test_loss
     }
 
-    print(f"[Fold {fold_idx}] Acurácia: {acc_value:.4f} | Precisão: {prec_value:.4f} | Recall: {rec_value:.4f} | F1: {f1_value:.4f}")
+    print(f"[Fold {fold_idx}] Acurácia: {acc_value:.4f} | Precisão: {prec_value:.4f} | Recall: {rec_value:.4f} | F1: {f1_value:.4f} | Test Loss: {avg_test_loss:.4f}")
 
     matrix_filename = model_filename.replace(".ckpt", ".png")
     matrix_path = os.path.join(model_base_dir, matrix_filename)
     plot_confusion_matrix(conf_matrix_value, save_path=matrix_path, title=f"Matriz de Confusão - Fold {fold_idx}")
 
-# Exibir e salvar métricas médias ao final
 def print_final_stats(metric_list, name):
     metric_array = np.array(metric_list)
     print(f"{name} por Fold: {metric_array}")
@@ -127,8 +136,8 @@ mean_acc, std_acc = print_final_stats(acc_list, "Acurácia")
 mean_prec, std_prec = print_final_stats(prec_list, "Precisão")
 mean_rec, std_rec = print_final_stats(rec_list, "Recall")
 mean_f1, std_f1 = print_final_stats(f1_list, "F1-score")
+mean_loss, std_loss = print_final_stats(loss_list, "Test Loss")
 
-# Salvar estatísticas finais em arquivo .txt
 stats_filename = f"{hyperparams['NAME_DATASET']}_{hyperparams['TMODEL']}_ne_resultados.txt"
 stats_path = os.path.join(model_base_dir, stats_filename)
 
@@ -138,10 +147,12 @@ with open(stats_path, 'w') as f:
         f.write(f"  Acurácia: {metrics['acc']:.4f}\n")
         f.write(f"  Precisão: {metrics['prec']:.4f}\n")
         f.write(f"  Recall:   {metrics['rec']:.4f}\n")
-        f.write(f"  F1-score: {metrics['f1']:.4f}\n\n")
+        f.write(f"  F1-score: {metrics['f1']:.4f}\n")
+        f.write(f"  Test Loss: {metrics['loss']:.4f}\n\n")
 
     f.write("=== Métricas Finais ===\n")
     f.write(f"Acurácia: Média={mean_acc:.4f}, Desvio={std_acc:.4f}\n")
     f.write(f"Precisão: Média={mean_prec:.4f}, Desvio={std_prec:.4f}\n")
     f.write(f"Recall:   Média={mean_rec:.4f}, Desvio={std_rec:.4f}\n")
     f.write(f"F1-score: Média={mean_f1:.4f}, Desvio={std_f1:.4f}\n")
+    f.write(f"Test Loss: Média={mean_loss:.4f}, Desvio={std_loss:.4f}\n")
