@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pytorch_lightning as pl
 from torchmetrics import Accuracy, Precision, Recall, F1Score, ConfusionMatrix
-from model import CustomEnsembleModel
-from kf_data import CustomImageCSVModule_kf
+from model import CustomModel
+from kf_data import CustomImageModule_kf
 import yaml
 import os
 
@@ -47,10 +47,10 @@ for fold_idx in range(hyperparams['K_FOLDS']):
         continue
 
     print(f"[Fold {fold_idx}] Avaliando modelo: {model_path}")
-    model = CustomEnsembleModel.load_from_checkpoint(model_path)
+    model = CustomModel.load_from_checkpoint(model_path)
     model.eval()
 
-    data_module = CustomImageCSVModule_kf(
+    data_module = CustomImageModule_kf(
         train_dir=hyperparams['TRAIN_DIR'],
         test_dir=hyperparams['TEST_DIR'],
         shape=hyperparams['SHAPE'],
