@@ -70,8 +70,7 @@ def main():
 
         softmax = torch.nn.Softmax(dim=1)
 
-        file_list = [path for path, _ in data_module.test_ds.samples]
-        class_names = data_module.test_ds.classes
+        file_list = data_module.test_ds.image_paths
         fold_labels = []
         fold_preds = []
         all_probs = []
@@ -112,8 +111,8 @@ def main():
             pred_label_discrepant = fold_preds[idx_discrepancy]
 
             print(f"[Fold {fold_idx}] Arquivo mais discrepante: {file_discrepant}")
-            print(f"[Fold {fold_idx}] Classe real: {class_names[true_label_discrepant]}")
-            print(f"[Fold {fold_idx}] Classe predita: {class_names[pred_label_discrepant]}")
+            print(f"[Fold {fold_idx}] Classe real: {true_label_discrepant}")
+            print(f"[Fold {fold_idx}] Classe predita: {pred_label_discrepant}")
             print(f"[Fold {fold_idx}] Probabilidade da classe real: {prob_real[idx_discrepancy]:.4f}")
             print(f"[Fold {fold_idx}] Probabilidade da classe predita: {prob_pred[idx_discrepancy]:.4f}")
         else:
