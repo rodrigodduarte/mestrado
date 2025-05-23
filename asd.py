@@ -59,9 +59,6 @@ def main():
         fold_idx=fold_idx
     )
     data_module.setup(stage='test')
-    test_dataset = data_module.test_dataloader().dataset
-    file_list = [path for path, _ in test_dataset.samples]  
-
     test_loader = data_module.test_dataloader()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -69,7 +66,9 @@ def main():
 
     all_preds, all_labels = [], []
 
-    file_list = [s[0] for s in data_module.test_dataset.samples]
+    test_dataset = data_module.test_ds
+    file_list = test_dataset.image_paths
+
 
     with torch.no_grad():
         for images, features, labels in test_loader:
@@ -91,6 +90,7 @@ def main():
         pred_label = all_preds[idx_error]
 
         file_error = file_list[idx_error]
+
 
         print(f"Arquivo mal classificado: {file_error}")
         print(f"Classe real: {true_label}, foi classificado como: {pred_label}")
