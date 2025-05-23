@@ -76,9 +76,9 @@ def main():
         all_probs = []
 
         with torch.no_grad():
-            for images, features, labels in test_loader:
-                images, features, labels = images.to(device), features.to(device), labels.to(device)
-                outputs = model(images, features)
+            for images, labels in test_loader:
+                images, labels = images.to(device), labels.to(device)
+                outputs = model(images)
                 probs = softmax(outputs)
                 preds = torch.argmax(probs, dim=1)
 
