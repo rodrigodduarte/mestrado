@@ -36,7 +36,7 @@ def main():
     set_random_seeds()
     hyperparams = load_hyperparameters()
 
-    model_base_dir = os.path.join("modelos_kf", f"{hyperparams['NAME_DATASET']}_{hyperparams['TMODEL']}")
+    model_base_dir = os.path.join("modelos_kf", f"{hyperparams['NAME_DATASET']}_{hyperparams['TMODEL']}_ne")
 
     all_labels = []
     all_preds = []
