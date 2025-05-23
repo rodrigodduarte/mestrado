@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import confusion_matrix, accuracy_score
-from model import CustomEnsembleModel
-from kf_data import CustomImageCSVModule_kf
+from model import CustomEnsembleModel, CustomModel
+from kf_data import CustomImageCSVModule_kf, CustomImageModule_kf
 import yaml
 import os
 
@@ -36,7 +36,7 @@ def main():
     set_random_seeds()
     hyperparams = load_hyperparameters()
 
-    model_base_dir = os.path.join("modelos_kf", f"{hyperparams['NAME_DATASET']}_{hyperparams['TMODEL']}")
+    model_base_dir = os.path.join("modelos_kf", f"{hyperparams['NAME_DATASET']}_{hyperparams['TMODEL']}_ne")
 
     all_labels = []
     all_preds = []
@@ -50,10 +50,10 @@ def main():
             continue
 
         print(f"Avaliando modelo: {model_path}")
-        model = CustomEnsembleModel.load_from_checkpoint(model_path)
+        model = CustomModel.load_from_checkpoint(model_path)
         model.eval()
 
-        data_module = CustomImageCSVModule_kf(
+        data_module = CustomImageModule_kf(
             train_dir=hyperparams['TRAIN_DIR'],
             test_dir=hyperparams['TEST_DIR'],
             shape=hyperparams['SHAPE'],
