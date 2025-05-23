@@ -101,22 +101,26 @@ def main():
     else:
         print("Nenhum erro encontrado.")
 
-    # Encontrar a imagem com maior discrepância
+    # Encontrar a imagem com maior discrepância ENTRE OS ERROS
     prob_real = all_probs[np.arange(len(all_labels)), all_labels]
     prob_pred = all_probs[np.arange(len(all_labels)), all_preds]
     discrepancy = prob_pred - prob_real
 
-    idx_discrepancy = np.argmax(discrepancy)
+    if errors.any():
+        idx_discrepancy = np.argmax(discrepancy[errors])
+        idx_discrepancy = np.where(errors)[0][idx_discrepancy]
 
-    file_discrepant = file_list[idx_discrepancy]
-    true_label_discrepant = all_labels[idx_discrepancy]
-    pred_label_discrepant = all_preds[idx_discrepancy]
+        file_discrepant = file_list[idx_discrepancy]
+        true_label_discrepant = all_labels[idx_discrepancy]
+        pred_label_discrepant = all_preds[idx_discrepancy]
 
-    print(f"\nArquivo mais discrepante: {file_discrepant}")
-    print(f"Classe real: {true_label_discrepant}")
-    print(f"Classe predita: {pred_label_discrepant}")
-    print(f"Probabilidade da classe real: {prob_real[idx_discrepancy]:.4f}")
-    print(f"Probabilidade da classe predita: {prob_pred[idx_discrepancy]:.4f}")
+        print(f"\nArquivo mais discrepante (entre os erros): {file_discrepant}")
+        print(f"Classe real: {true_label_discrepant}")
+        print(f"Classe predita: {pred_label_discrepant}")
+        print(f"Probabilidade da classe real: {prob_real[idx_discrepancy]:.4f}")
+        print(f"Probabilidade da classe predita: {prob_pred[idx_discrepancy]:.4f}")
+    else:
+        print("Nenhum erro encontrado para calcular discrepância.")
 
     # Gerar e salvar heatmap da matriz de confusão
     heatmap_filename = f"fold_{fold_idx}_matriz_confusao_heatmap.png"
