@@ -66,7 +66,7 @@ def main():
 
     all_preds, all_labels = [], []
 
-    df_test = data_module.test_dataframe.reset_index(drop=True)
+    file_list = [s[0] for s in data_module.test_dataset.samples]
 
     with torch.no_grad():
         for images, features, labels in test_loader:
@@ -87,7 +87,7 @@ def main():
         true_label = all_labels[idx_error]
         pred_label = all_preds[idx_error]
 
-        file_error = df_test.iloc[idx_error]['filename']
+        file_error = file_list[idx_error]
 
         print(f"Arquivo mal classificado: {file_error}")
         print(f"Classe real: {true_label}, foi classificado como: {pred_label}")
