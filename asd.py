@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, accuracy_score
 from model import CustomEnsembleModel
 from kf_data import CustomImageCSVModule_kf
 import yaml
@@ -92,6 +92,9 @@ def main():
 
         all_preds.extend(fold_preds)
         all_labels.extend(fold_labels)
+
+        acc = accuracy_score(fold_labels, fold_preds)
+        print(f"[Fold {fold_idx}] Acurácia: {acc * 100:.2f}%")
 
         prob_real = all_probs[np.arange(len(fold_labels)), fold_labels]
         prob_pred = all_probs[np.arange(len(fold_labels)), fold_preds]
