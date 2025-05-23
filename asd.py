@@ -70,7 +70,7 @@ def main():
 
         softmax = torch.nn.Softmax(dim=1)
 
-        file_list = [path for path, _ in data_module.test_ds.samples]
+        file_list = data_module.test_ds.image_paths
         class_names = data_module.test_ds.classes
         fold_labels = []
         fold_preds = []
