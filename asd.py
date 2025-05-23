@@ -1,6 +1,5 @@
 import torch
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import confusion_matrix
@@ -65,22 +64,28 @@ def main():
     model.to(device)
 
     all_preds, all_labels = [], []
+    all_probs = []
 
     test_dataset = data_module.test_ds
     file_list = test_dataset.image_paths
 
+    softmax = torch.nn.Softmax(dim=1)
 
     with torch.no_grad():
         for images, features, labels in test_loader:
             images, features, labels = images.to(device), features.to(device), labels.to(device)
             outputs = model(images, features)
-            preds = torch.argmax(outputs, dim=1)
+            probs = softmax(outputs)
+
+            preds = torch.argmax(probs, dim=1)
 
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
+            all_probs.append(probs.cpu().numpy())
 
     all_preds = np.array(all_preds)
     all_labels = np.array(all_labels)
+    all_probs = np.concatenate(all_probs, axis=0)
 
     errors = all_preds != all_labels
 
@@ -91,11 +96,27 @@ def main():
 
         file_error = file_list[idx_error]
 
-
         print(f"Arquivo mal classificado: {file_error}")
         print(f"Classe real: {true_label}, foi classificado como: {pred_label}")
     else:
         print("Nenhum erro encontrado.")
+
+    # Encontrar a imagem com maior discrepância
+    prob_real = all_probs[np.arange(len(all_labels)), all_labels]
+    prob_pred = all_probs[np.arange(len(all_labels)), all_preds]
+    discrepancy = prob_pred - prob_real
+
+    idx_discrepancy = np.argmax(discrepancy)
+
+    file_discrepant = file_list[idx_discrepancy]
+    true_label_discrepant = all_labels[idx_discrepancy]
+    pred_label_discrepant = all_preds[idx_discrepancy]
+
+    print(f"\nArquivo mais discrepante: {file_discrepant}")
+    print(f"Classe real: {true_label_discrepant}")
+    print(f"Classe predita: {pred_label_discrepant}")
+    print(f"Probabilidade da classe real: {prob_real[idx_discrepancy]:.4f}")
+    print(f"Probabilidade da classe predita: {prob_pred[idx_discrepancy]:.4f}")
 
     # Gerar e salvar heatmap da matriz de confusão
     heatmap_filename = f"fold_{fold_idx}_matriz_confusao_heatmap.png"
