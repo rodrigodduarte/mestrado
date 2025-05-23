@@ -59,6 +59,9 @@ def main():
         fold_idx=fold_idx
     )
     data_module.setup(stage='test')
+    test_dataset = data_module.test_dataloader().dataset
+    file_list = [path for path, _ in test_dataset.samples]  
+
     test_loader = data_module.test_dataloader()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
