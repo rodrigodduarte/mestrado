@@ -487,14 +487,12 @@ class CustomModelTriple(pl.LightningModule):
                  epochs: int,
                  learning_rate: float,
                  features_dim: int,
-                 scale_factor: float,
                  drop_path_rate: float,
                  num_classes: int,
                  label_smoothing: float,
                  optimizer_momentum: tuple,
                  weight_decay: float,
-                 layer_scale: float,
-                 mlp_vector_model_scale: float):
+                 layer_scale: float):
         super().__init__()
         
         # armazenar hiperparâmetros para facilitar o load_from_checkpoint
