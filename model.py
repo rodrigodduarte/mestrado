@@ -487,12 +487,14 @@ class CustomModelTriple(pl.LightningModule):
                  epochs: int,
                  learning_rate: float,
                  features_dim: int,
+                 scale_factor: float,
                  drop_path_rate: float,
                  num_classes: int,
                  label_smoothing: float,
                  optimizer_momentum: tuple,
                  weight_decay: float,
-                 layer_scale: float):
+                 layer_scale: float,
+                 mlp_vector_model_scale: float):
         super().__init__()
         
         # armazenar hiperparâmetros para facilitar o load_from_checkpoint
@@ -504,6 +506,25 @@ class CustomModelTriple(pl.LightningModule):
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.optimizer_momentum = optimizer_momentum
+
+        # Métricas
+        self.train_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
+        self.val_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
+        self.test_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
+
+        self.train_f1 = F1Score(task="multiclass", num_classes=num_classes)
+        self.val_f1 = F1Score(task="multiclass", num_classes=num_classes)       
+        self.test_f1 = F1Score(task="multiclass", num_classes=num_classes) 
+        
+        self.train_precision = Precision(task="multiclass", num_classes=num_classes)
+        self.val_precision = Precision(task="multiclass", num_classes=num_classes)
+        self.test_precision = Precision(task="multiclass", num_classes=num_classes)
+        
+        self.train_recall = Recall(task="multiclass", num_classes=num_classes)
+        self.val_recall = Recall(task="multiclass", num_classes=num_classes)
+        self.test_recall = Recall(task="multiclass", num_classes=num_classes)
+
+        self.test_confusion_matrix = MulticlassConfusionMatrix(num_classes=num_classes)
 
         # === Backbone ConvNeXt Tiny ===
         self.convnext_model = models.convnext_tiny(weights=ConvNeXt_Tiny_Weights.DEFAULT,
@@ -548,21 +569,54 @@ class CustomModelTriple(pl.LightningModule):
         images, features, labels = batch
         outputs = self(images, features)
         loss = self.criterion(outputs, labels)
+
+        # métricas
+        acc = self.train_accuracy(outputs, labels)
+        f1 = self.train_f1(outputs, labels)
+        precision = self.train_precision(outputs, labels)
+        recall = self.train_recall(outputs, labels)
+
         self.log("train_loss", loss, prog_bar=True)
+        self.log("train_acc", acc, prog_bar=True)
+        self.log("train_f1", f1, prog_bar=False)
+        self.log("train_precision", precision, prog_bar=False)
+        self.log("train_recall", recall, prog_bar=False)
         return loss
 
     def validation_step(self, batch, batch_idx):
         images, features, labels = batch
         outputs = self(images, features)
         loss = self.criterion(outputs, labels)
+
+        acc = self.val_accuracy(outputs, labels)
+        f1 = self.val_f1(outputs, labels)
+        precision = self.val_precision(outputs, labels)
+        recall = self.val_recall(outputs, labels)
+
         self.log("val_loss", loss, prog_bar=True)
+        self.log("val_acc", acc, prog_bar=True)
+        self.log("val_f1", f1, prog_bar=False)
+        self.log("val_precision", precision, prog_bar=False)
+        self.log("val_recall", recall, prog_bar=False)
         return loss
 
     def test_step(self, batch, batch_idx):
         images, features, labels = batch
         outputs = self(images, features)
         loss = self.criterion(outputs, labels)
+
+        acc = self.test_accuracy(outputs, labels)
+        f1 = self.test_f1(outputs, labels)
+        precision = self.test_precision(outputs, labels)
+        recall = self.test_recall(outputs, labels)
+        cm = self.test_confusion_matrix(outputs, labels)
+
         self.log("test_loss", loss, prog_bar=True)
+        self.log("test_acc", acc, prog_bar=True)
+        self.log("test_f1", f1, prog_bar=False)
+        self.log("test_precision", precision, prog_bar=False)
+        self.log("test_recall", recall, prog_bar=False)
+        self.log("test_confusion_matrix", cm, prog_bar=False)
         return loss
 
     def configure_optimizers(self):
