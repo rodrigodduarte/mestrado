@@ -478,12 +478,7 @@ class CustomEnsembleModel(pl.LightningModule):
         }
 
 
-import torch
-import torch.nn as nn
-import pytorch_lightning as pl
-from torchvision import models
-from torchvision.models import ConvNeXt_Tiny_Weights
-from torchvision.models.swin_transformer import swin_t, Swin_T_Weights
+
 
 class CustomModelTriple(pl.LightningModule):
     def __init__(self,
@@ -492,7 +487,6 @@ class CustomModelTriple(pl.LightningModule):
                  epochs: int,
                  learning_rate: float,
                  features_dim: int,
-                 scale_factor: float,
                  drop_path_rate: float,
                  num_classes: int,
                  label_smoothing: float,

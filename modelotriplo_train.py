@@ -61,13 +61,11 @@ def train_model(config=None):
 
         
             model = CustomModelTriple(
-                tmodel=hyperparams["TMODEL"],
                 name_dataset=hyperparams["NAME_DATASET"],
                 shape=hyperparams["SHAPE"],
                 epochs=hyperparams['MAX_EPOCHS'],
                 learning_rate=float(config_sweep.learning_rate),
                 features_dim=hyperparams["FEATURES_DIM"],
-                scale_factor=hyperparams['SCALE_FACTOR'],
                 drop_path_rate=config_sweep.drop_path_rate,
                 num_classes=hyperparams['NUM_CLASSES'],
                 label_smoothing=config_sweep.label_smoothing,
@@ -106,7 +104,7 @@ def train_model(config=None):
             trainer.fit(model, data_module)
             
             best_model_path = fold_callback.best_model_path
-            model = CustomEnsembleModel.load_from_checkpoint(best_model_path)
+            model = CustomModelTriple.load_from_checkpoint(best_model_path)
             val_metrics = trainer.validate(model, data_module)[0]
             test_metrics = trainer.test(model, data_module)[0]
 
