@@ -55,14 +55,12 @@ def train_model():
             epochs=hyperparams['MAX_EPOCHS'],
             learning_rate=hyperparams['LEARNING_RATE'],
             features_dim=hyperparams["FEATURES_DIM"],
-            scale_factor=hyperparams['SCALE_FACTOR'],
             drop_path_rate=hyperparams['DROP_PATH_RATE'],
             num_classes=hyperparams['NUM_CLASSES'],
             label_smoothing=hyperparams['LABEL_SMOOTHING'],
             optimizer_momentum=(hyperparams['OPTIMIZER_MOMENTUM'], 0.999),
             weight_decay=hyperparams['WEIGHT_DECAY'],
-            layer_scale=hyperparams['LAYER_SCALE'],
-            mlp_vector_model_scale=hyperparams['MLP_VECTOR_MODEL_SCALE'])
+            layer_scale=hyperparams['LAYER_SCALE'])
 
         data_module = CustomImageCSVModule_kf(
             train_dir=hyperparams['TRAIN_DIR'],
