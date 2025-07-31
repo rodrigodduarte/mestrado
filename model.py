@@ -478,8 +478,6 @@ class CustomEnsembleModel(pl.LightningModule):
         }
 
 
-
-
 class CustomModelTriple(pl.LightningModule):
     def __init__(self,
                  name_dataset: str,
@@ -495,7 +493,6 @@ class CustomModelTriple(pl.LightningModule):
                  layer_scale: float):
         super().__init__()
         
-        # armazenar hiperparâmetros para facilitar o load_from_checkpoint
         self.save_hyperparameters()
         
         self.num_classes = num_classes
@@ -511,8 +508,8 @@ class CustomModelTriple(pl.LightningModule):
         self.test_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
 
         self.train_f1 = F1Score(task="multiclass", num_classes=num_classes)
-        self.val_f1 = F1Score(task="multiclass", num_classes=num_classes)       
-        self.test_f1 = F1Score(task="multiclass", num_classes=num_classes) 
+        self.val_f1 = F1Score(task="multiclass", num_classes=num_classes)
+        self.test_f1 = F1Score(task="multiclass", num_classes=num_classes)
         
         self.train_precision = Precision(task="multiclass", num_classes=num_classes)
         self.val_precision = Precision(task="multiclass", num_classes=num_classes)
@@ -609,9 +606,8 @@ class CustomModelTriple(pl.LightningModule):
         f1 = self.test_f1(preds, labels)
         precision = self.test_precision(preds, labels)
         recall = self.test_recall(preds, labels)
-        self.test_confusion_matrix(preds, labels)
+        self.test_confusion_matrix(preds.to(self.device), labels.to(self.device))
 
-        # acumula para matriz de confusão final
         self.test_preds.append(preds.cpu())
         self.test_labels.append(labels.cpu())
 
@@ -623,8 +619,8 @@ class CustomModelTriple(pl.LightningModule):
         return loss
 
     def on_test_epoch_end(self):
-        all_preds = torch.cat(self.test_preds)
-        all_labels = torch.cat(self.test_labels)
+        all_preds = torch.cat(self.test_preds).to(self.device)
+        all_labels = torch.cat(self.test_labels).to(self.device)
         conf_matrix_value = self.test_confusion_matrix(all_preds, all_labels).cpu().numpy()
         self.test_confusion_matrix.reset()
 
