@@ -523,6 +523,8 @@ class CustomModelTriple(pl.LightningModule):
         self.test_recall = Recall(task="multiclass", num_classes=num_classes)
 
         self.test_confusion_matrix = MulticlassConfusionMatrix(num_classes=num_classes)
+        self.test_preds = []
+        self.test_labels = []
 
         # === Backbone ConvNeXt Tiny ===
         self.convnext_model = models.convnext_tiny(weights=ConvNeXt_Tiny_Weights.DEFAULT,
@@ -568,7 +570,6 @@ class CustomModelTriple(pl.LightningModule):
         outputs = self(images, features)
         loss = self.criterion(outputs, labels)
 
-        # métricas
         acc = self.train_accuracy(outputs, labels)
         f1 = self.train_f1(outputs, labels)
         precision = self.train_precision(outputs, labels)
@@ -603,19 +604,35 @@ class CustomModelTriple(pl.LightningModule):
         outputs = self(images, features)
         loss = self.criterion(outputs, labels)
 
-        acc = self.test_accuracy(outputs, labels)
-        f1 = self.test_f1(outputs, labels)
-        precision = self.test_precision(outputs, labels)
-        recall = self.test_recall(outputs, labels)
-        cm = self.test_confusion_matrix(outputs, labels)
+        preds = torch.argmax(outputs, 1)
+        acc = self.test_accuracy(preds, labels)
+        f1 = self.test_f1(preds, labels)
+        precision = self.test_precision(preds, labels)
+        recall = self.test_recall(preds, labels)
+        self.test_confusion_matrix(preds, labels)
+
+        # acumula para matriz de confusão final
+        self.test_preds.append(preds.cpu())
+        self.test_labels.append(labels.cpu())
 
         self.log("test_loss", loss, prog_bar=True)
         self.log("test_acc", acc, prog_bar=True)
         self.log("test_f1", f1, prog_bar=False)
         self.log("test_precision", precision, prog_bar=False)
         self.log("test_recall", recall, prog_bar=False)
-        self.log("test_confusion_matrix", cm, prog_bar=False)
         return loss
+
+    def on_test_epoch_end(self):
+        all_preds = torch.cat(self.test_preds)
+        all_labels = torch.cat(self.test_labels)
+        conf_matrix_value = self.test_confusion_matrix(all_preds, all_labels).cpu().numpy()
+        self.test_confusion_matrix.reset()
+
+        print("✅ Matriz de Confusão calculada após o teste:")
+        print(conf_matrix_value)
+
+        self.test_preds.clear()
+        self.test_labels.clear()
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(),
