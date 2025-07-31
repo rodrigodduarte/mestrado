@@ -284,14 +284,12 @@ class CustomEnsembleModel(pl.LightningModule):
         self.epochs = epochs
         self.learning_rate = learning_rate
         self.features_dim = features_dim
-        self.scale_factor = scale_factor
         self.drop_path_rate = drop_path_rate
         self.num_classes = num_classes
         self.label_smoothing = label_smoothing
         self.optimizer_momentum = optimizer_momentum
         self.weight_decay= weight_decay
         self.layer_scale = layer_scale
-        self.mlp_vector_model_scale = mlp_vector_model_scale
         self.fn_loss = nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)
         
         self.model_dim = 0
