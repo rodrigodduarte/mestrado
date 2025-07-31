@@ -485,6 +485,7 @@ class CustomModelTriple(pl.LightningModule):
                  epochs: int,
                  learning_rate: float,
                  features_dim: int,
+                 scale_factor: float,
                  drop_path_rate: float,
                  num_classes: int,
                  label_smoothing: float,
@@ -501,27 +502,9 @@ class CustomModelTriple(pl.LightningModule):
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.optimizer_momentum = optimizer_momentum
-
-        # Métricas
-        self.train_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
-        self.val_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
-        self.test_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
-
-        self.train_f1 = F1Score(task="multiclass", num_classes=num_classes)
-        self.val_f1 = F1Score(task="multiclass", num_classes=num_classes)
-        self.test_f1 = F1Score(task="multiclass", num_classes=num_classes)
         
-        self.train_precision = Precision(task="multiclass", num_classes=num_classes)
-        self.val_precision = Precision(task="multiclass", num_classes=num_classes)
-        self.test_precision = Precision(task="multiclass", num_classes=num_classes)
-        
-        self.train_recall = Recall(task="multiclass", num_classes=num_classes)
-        self.val_recall = Recall(task="multiclass", num_classes=num_classes)
-        self.test_recall = Recall(task="multiclass", num_classes=num_classes)
-
-        self.test_confusion_matrix = MulticlassConfusionMatrix(num_classes=num_classes)
-        self.test_preds = []
-        self.test_labels = []
+        # Para armazenar a melhor época salva
+        self.best_epoch = None
 
         # === Backbone ConvNeXt Tiny ===
         self.convnext_model = models.convnext_tiny(weights=ConvNeXt_Tiny_Weights.DEFAULT,
@@ -566,69 +549,31 @@ class CustomModelTriple(pl.LightningModule):
         images, features, labels = batch
         outputs = self(images, features)
         loss = self.criterion(outputs, labels)
-
-        acc = self.train_accuracy(outputs, labels)
-        f1 = self.train_f1(outputs, labels)
-        precision = self.train_precision(outputs, labels)
-        recall = self.train_recall(outputs, labels)
-
         self.log("train_loss", loss, prog_bar=True)
-        self.log("train_acc", acc, prog_bar=True)
-        self.log("train_f1", f1, prog_bar=False)
-        self.log("train_precision", precision, prog_bar=False)
-        self.log("train_recall", recall, prog_bar=False)
         return loss
 
     def validation_step(self, batch, batch_idx):
         images, features, labels = batch
         outputs = self(images, features)
         loss = self.criterion(outputs, labels)
-
-        acc = self.val_accuracy(outputs, labels)
-        f1 = self.val_f1(outputs, labels)
-        precision = self.val_precision(outputs, labels)
-        recall = self.val_recall(outputs, labels)
-
         self.log("val_loss", loss, prog_bar=True)
-        self.log("val_acc", acc, prog_bar=True)
-        self.log("val_f1", f1, prog_bar=False)
-        self.log("val_precision", precision, prog_bar=False)
-        self.log("val_recall", recall, prog_bar=False)
         return loss
 
     def test_step(self, batch, batch_idx):
         images, features, labels = batch
         outputs = self(images, features)
         loss = self.criterion(outputs, labels)
-
-        preds = torch.argmax(outputs, 1)
-        acc = self.test_accuracy(preds, labels)
-        f1 = self.test_f1(preds, labels)
-        precision = self.test_precision(preds, labels)
-        recall = self.test_recall(preds, labels)
-        self.test_confusion_matrix(preds.to(self.device), labels.to(self.device))
-
-        self.test_preds.append(preds.cpu())
-        self.test_labels.append(labels.cpu())
-
         self.log("test_loss", loss, prog_bar=True)
-        self.log("test_acc", acc, prog_bar=True)
-        self.log("test_f1", f1, prog_bar=False)
-        self.log("test_precision", precision, prog_bar=False)
-        self.log("test_recall", recall, prog_bar=False)
         return loss
 
-    def on_test_epoch_end(self):
-        all_preds = torch.cat(self.test_preds).to(self.device)
-        all_labels = torch.cat(self.test_labels).to(self.device)
-        conf_matrix_value = self.test_confusion_matrix(all_preds, all_labels).cpu().numpy()
-        self.test_confusion_matrix.reset()
+    def on_save_checkpoint(self, checkpoint):
+        # Salva a época do melhor modelo
+        self.best_epoch = self.current_epoch
 
-        print("✅ Matriz de Confusão calculada após o teste:")
-        print(conf_matrix_value)
-
-        self.test_preds.clear()
-        self.test_labels.clear()
+    def on_train_end(self):
+        # Imprime a melhor época salva no checkpoint apenas no final do treinamento
+        if self.best_epoch is not None:
+            print(f"✅ Melhor modelo salvo no checkpoint na época: {self.best_epoch}")
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(),
