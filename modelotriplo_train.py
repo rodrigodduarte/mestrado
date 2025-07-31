@@ -59,7 +59,7 @@ def train_model():
             label_smoothing=hyperparams['LABEL_SMOOTHING'],
             optimizer_momentum=(hyperparams['OPTIMIZER_MOMENTUM'], 0.999),
             weight_decay=hyperparams['WEIGHT_DECAY'],
-            layer_scale=hyperparams['LAYER_SCALE']=)
+            layer_scale=hyperparams['LAYER_SCALE'])
         
 
         data_module = CustomImageCSVModule_kf(
@@ -96,7 +96,7 @@ def train_model():
         best_epoch = checkpoint_data['epoch']
         print(f"Melhor modelo para fold {fold} salvo na época {best_epoch}")
 
-        model = CustomEnsembleModel.load_from_checkpoint(best_model_path)
+        model = CustomModelTriple.load_from_checkpoint(best_model_path)
         val_metrics = trainer.validate(model, data_module)[0]
         test_metrics = trainer.test(model, data_module)[0]
 
