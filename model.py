@@ -355,12 +355,8 @@ class CustomEnsembleModel(pl.LightningModule):
 
     def forward(self, x, features):
         x = self.dl_model(x)
-        features = self.mlp_vector_model(features)
-
         x = torch.cat((x, features), dim=1)
-
         x = self.ensemble_model(x)
-
         return x
 
 
