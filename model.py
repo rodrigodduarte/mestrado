@@ -268,9 +268,9 @@ class CustomModel(pl.LightningModule):
       
 
 class CustomEnsembleModel(pl.LightningModule):
-    def __init__(self, tmodel, name_dataset, shape, epochs, learning_rate, features_dim, scale_factor,
+    def __init__(self, tmodel, name_dataset, shape, epochs, learning_rate, features_dim,
                  drop_path_rate, num_classes, label_smoothing, optimizer_momentum,
-                 weight_decay, layer_scale, mlp_vector_model_scale):
+                 weight_decay, layer_scale):
         
         super(CustomEnsembleModel, self).__init__()
 
@@ -341,17 +341,8 @@ class CustomEnsembleModel(pl.LightningModule):
                 )
             self.dl_model.head = self.sequential_layers
 
-
-        # Modelo MLP ajustado
-        self.mlp_vector_model = nn.Sequential(
-            nn.Linear(features_dim, int((self.mlp_vector_model_scale) * features_dim)),
-            nn.GELU(approximate='none'),
-            nn.LayerNorm(int((self.mlp_vector_model_scale) * features_dim)),
-            nn.Dropout(p=0.3)
-        )
-
         # Modelo de combinação ajustado
-        adjusted_dim = int((self.mlp_vector_model_scale) * features_dim) + self.model_dim
+        adjusted_dim = self.features_dim + self.model_dim
         scaled_dim = int(adjusted_dim * self.layer_scale)
 
         self.ensemble_model = nn.Sequential(
