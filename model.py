@@ -485,7 +485,6 @@ class CustomModelTriple(pl.LightningModule):
                  epochs: int,
                  learning_rate: float,
                  features_dim: int,
-                 scale_factor: float,
                  drop_path_rate: float,
                  num_classes: int,
                  label_smoothing: float,
