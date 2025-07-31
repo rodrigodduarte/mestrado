@@ -575,6 +575,13 @@ class CustomModelTriple(pl.LightningModule):
         if self.best_epoch is not None:
             print(f"✅ Melhor modelo salvo no checkpoint na época: {self.best_epoch}")
 
+    def on_test_start(self):
+        # Informa qual época do modelo está sendo usada para teste
+        if self.best_epoch is not None:
+            print(f"🔍 Iniciando teste com o modelo salvo na época: {self.best_epoch}")
+        else:
+            print("🔍 Iniciando teste com o modelo (época do checkpoint não registrada)")
+
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(),
                                       lr=self.learning_rate,
