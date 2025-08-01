@@ -52,8 +52,25 @@ for fold_idx in range(hyperparams['K_FOLDS']):
 
     print(f"[Fold {fold_idx}] Avaliando modelo: {model_path}")
 
-    # 🔄 Ajuste: carregar checkpoint ignorando camadas extras ou incompatíveis
-    model = CustomEnsembleModel.load_from_checkpoint(model_path, strict=False)
+    # 📌 Carregar checkpoint manualmente e tratar pesos incompatíveis
+    checkpoint = torch.load(model_path, map_location=torch.device('cpu'))
+
+    # Criar instância do modelo atual
+    model = CustomEnsembleModel()
+
+    # Filtrar state_dict para remover camadas incompatíveis
+    state_dict = checkpoint["state_dict"]
+    model_state = model.state_dict()
+
+    filtered_state_dict = {}
+    for k, v in state_dict.items():
+        if k in model_state and model_state[k].shape == v.shape:
+            filtered_state_dict[k] = v
+        else:
+            print(f"[Aviso] Ignorando camada incompatível: {k}")
+
+    # Carregar apenas os pesos compatíveis
+    model.load_state_dict(filtered_state_dict, strict=False)
     model.eval()
 
     data_module = CustomImageCSVModule_kf(
