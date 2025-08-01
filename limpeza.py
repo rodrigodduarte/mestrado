@@ -3,7 +3,7 @@ from pathlib import Path
 import shutil
 
 # 📂 pasta onde estão os arquivos .ckpt
-base_dir = Path("modelos_kf/D2_convnext_t")
+base_dir = Path("modelos_kf/D2_swint_t")
 
 # 🔍 lista todos os arquivos com sufixo -v
 ckpt_files = sorted(base_dir.glob("fold_*_best_model-v*.ckpt"))
