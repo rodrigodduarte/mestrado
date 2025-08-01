@@ -31,20 +31,17 @@ def plot_confusion_matrix(cm, save_path, title='Matriz de Confusão'):
     plt.savefig(save_path)
     plt.close()
 
+# Configura seeds e carrega hiperparâmetros
 set_random_seeds()
 hyperparams = load_hyperparameters()
 
 model_base_dir = os.path.join("modelos_kf", f"{hyperparams['NAME_DATASET']}_{hyperparams['TMODEL']}")
 
 # Listas para armazenar as métricas de todos os folds
-acc_list = []
-prec_list = []
-rec_list = []
-f1_list = []
-loss_list = []
+acc_list, prec_list, rec_list, f1_list, loss_list = [], [], [], [], []
 fold_metrics = {}
 
-
+# Loop pelos folds
 for fold_idx in range(hyperparams['K_FOLDS']):
     model_filename = f"fold_{fold_idx}_best_model.ckpt"
     model_path = os.path.join(model_base_dir, model_filename)
@@ -54,7 +51,9 @@ for fold_idx in range(hyperparams['K_FOLDS']):
         continue
 
     print(f"[Fold {fold_idx}] Avaliando modelo: {model_path}")
-    model = CustomEnsembleModel.load_from_checkpoint(model_path)
+
+    # 🔄 Ajuste: carregar checkpoint ignorando camadas extras ou incompatíveis
+    model = CustomEnsembleModel.load_from_checkpoint(model_path, strict=False)
     model.eval()
 
     data_module = CustomImageCSVModule_kf(
@@ -74,8 +73,7 @@ for fold_idx in range(hyperparams['K_FOLDS']):
 
     criterion = torch.nn.CrossEntropyLoss()
     all_preds, all_labels = [], []
-    total_loss = 0.0
-    total_samples = 0
+    total_loss, total_samples = 0.0, 0
 
     with torch.no_grad():
         for images, features, labels in test_loader:
@@ -127,7 +125,7 @@ for fold_idx in range(hyperparams['K_FOLDS']):
     matrix_path = os.path.join(model_base_dir, matrix_filename)
     plot_confusion_matrix(conf_matrix_value, save_path=matrix_path, title=f"Matriz de Confusão - Fold {fold_idx}")
 
-# Exibir e salvar métricas médias ao final
+# Função auxiliar para imprimir métricas finais
 def print_final_stats(metric_list, name):
     metric_array = np.array(metric_list)
     print(f"{name} por Fold: {metric_array}")
@@ -146,14 +144,22 @@ stats_filename = f"{hyperparams['NAME_DATASET']}_{hyperparams['TMODEL']}_resulta
 stats_path = os.path.join(model_base_dir, stats_filename)
 
 with open(stats_path, 'w') as f:
+    # 🔵 Hiperparâmetros
+    f.write("=== Hiperparâmetros Utilizados ===\n")
+    for key, value in hyperparams.items():
+        f.write(f"{key}: {value}\n")
+    f.write("\n")
+
+    # 🔵 Métricas por fold
     for fold, metrics in fold_metrics.items():
         f.write(f"Fold {fold}:\n")
         f.write(f"  Acurácia: {metrics['acc']:.4f}\n")
         f.write(f"  Precisão: {metrics['prec']:.4f}\n")
         f.write(f"  Recall:   {metrics['rec']:.4f}\n")
-        f.write(f"  F1-score: {metrics['f1']:.4f}\n\n")
+        f.write(f"  F1-score: {metrics['f1']:.4f}\n")
         f.write(f"  Test Loss: {metrics['loss']:.6f}\n\n")
 
+    # 🔵 Métricas finais
     f.write("=== Métricas Finais ===\n")
     f.write(f"Acurácia: Média={mean_acc:.4f}, Desvio={std_acc:.4f}\n")
     f.write(f"Precisão: Média={mean_prec:.4f}, Desvio={std_prec:.4f}\n")
