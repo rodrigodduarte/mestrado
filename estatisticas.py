@@ -179,10 +179,14 @@ k = len(acc_list) or 1  # evita divisão por zero caso nenhum fold seja avaliado
 
 
 def ci95(mean, std):
-    """Retorna o intervalo de confiança (baixo, alto) para 95 % via t-Student."""
+    """IC de 95 % via t-Student (compatível com qualquer versão do SciPy)."""
     return stats.t.interval(
-        alpha=0.95, df=max(k - 1, 1), loc=mean, scale=std / np.sqrt(k)
+        0.95,                       # ← passa 95 % como primeiro arg.
+        df=max(k - 1, 1),
+        loc=mean,
+        scale=std / np.sqrt(k)
     )
+
 
 
 ci_acc_low, ci_acc_high = ci95(mean_acc, std_acc)
