@@ -1,10 +1,10 @@
 # Caminhos dos diretórios de treino e teste
-TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/train"
-TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/test"
-PROJECT: "flavia_kf"
-CHECKPOINT_PATH: "flavia_ensemble_kf_checkpoints_config_train"
-NAME_DATASET: "flavia"
-BEST_MODEL_PATH: /Documentos/projeto/flavia_bestmodel/visionary-sweep-2/best_model.ckpt
+TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swedish/train"
+TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swedish/test"
+PROJECT: "swedish_kf"
+CHECKPOINT_PATH: "swedish_ensemble_kf_checkpoints_config_train"
+NAME_DATASET: "swedish"
+BEST_MODEL_PATH: /Documentos/projeto/swedish_bestmodel/visionary-sweep-2/best_model.ckpt
 RUN_NAME: visionary-sweep-2
 CM_PATH: /home/rodrigoduarte/Documentos/projeto/matriz_de_confusao
 
@@ -16,14 +16,14 @@ FEATURES_DIM: 648
 HIDDEN_LAYERS: 2
 HIDDEN_UNITS: 1296
 MAX_EPOCHS: 100
-NUM_CLASSES: 32
+NUM_CLASSES: 15
 BATCH_SIZE: 64
-LEARNING_RATE: 0.000018744
-DROP_PATH_RATE: 0.039083
-LABEL_SMOOTHING: 0.00085622
-OPTIMIZER_MOMENTUM: 0.92921
-WEIGHT_DECAY: 0.00085839
-LAYER_SCALE: 2.72562
+LEARNING_RATE: 0.000028544
+DROP_PATH_RATE: 0.27467
+LABEL_SMOOTHING: 0.0082597
+OPTIMIZER_MOMENTUM: 0.9454
+WEIGHT_DECAY: 0.00049311
+LAYER_SCALE: 2.08182
 K_FOLDS: 5
 
 # Configurações de hardware e execução
