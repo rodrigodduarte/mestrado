@@ -26,7 +26,7 @@ import wandb
 from model import CustomModelTriple
 from kf_data import CustomImageCSVModule_kf
 # callbacks auxiliares (se quiser manter) —
-from callbacks import EarlyStoppingAtSpecificEpoch, SaveBestOrLastModelCallback
+from callbacks import EarlyStoppingAtSpecificEpoch, SaveBestOrLastModelCallback, EarlyStopCallback
 
 # ╭──────────────── utilidades ───────────────╮
 def load_hyperparameters(path="config.yaml"):
@@ -83,6 +83,21 @@ def train_model(config=None):
         )
         dm.setup(stage="fit")
 
+        # Callback de Early Stopping
+        epoch_callback = EarlyStoppingAtSpecificEpoch(
+            patience=2,
+            threshold=1e-3,
+            monitor="val_loss",
+            mode="min",
+            verbose=True
+        )
+
+        early_stop_callback = EarlyStopCallback(
+            metric_name="val_loss",  # Métrica a ser monitorada
+            threshold=0.5,          # Valor limite
+            target_epoch=3          # Época em que verificar (índice começa em 0)
+        )
+
         trainer = pl.Trainer(
             logger        = wandb_logger,
             log_every_n_steps = 10,
@@ -90,7 +105,10 @@ def train_model(config=None):
             devices       = hp["DEVICES"],
             precision     = hp["PRECISION"],
             max_epochs    = hp["MAX_EPOCHS"],
-            callbacks     = [TQDMProgressBar(leave=True), ckpt_cb]
+            callbacks     = [TQDMProgressBar(leave=True),
+                            ckpt_cb,
+                            epoch_callback,
+                            early_stop_callback]
         )
 
         trainer.fit(model, dm)
