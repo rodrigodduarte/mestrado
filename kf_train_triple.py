@@ -64,14 +64,12 @@ def train_model(config=None):
             epochs         = hp["MAX_EPOCHS"],
             learning_rate  = float(cfg.learning_rate),
             features_dim   = hp["FEATURES_DIM"],
-            scale_factor   = hp["SCALE_FACTOR"],
             drop_path_rate = cfg.drop_path_rate,
             num_classes    = hp["NUM_CLASSES"],
             label_smoothing= cfg.label_smoothing,
             optimizer_momentum=(cfg.optimizer_momentum, 0.999),
             weight_decay   = float(cfg.weight_decay),
-            layer_scale    = cfg.layer_scale,
-            mlp_vector_model_scale = cfg.mlp_vector_model_scale
+            layer_scale    = cfg.layer_scale
         )
 
         dm = CustomImageCSVModule_kf(
