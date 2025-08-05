@@ -26,7 +26,7 @@ def set_seeds(seed=42):
     random.seed(seed); np.random.seed(seed)
     torch.manual_seed(seed); torch.cuda.manual_seed_all(seed)
 
-def load_yaml(path):                 # config.yaml
+def load_yaml(path):                 # config2.yaml
     with open(path, "r") as f:
         return yaml.safe_load(f)
 
@@ -40,7 +40,7 @@ def t_val(mean, std, k, mu0):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--cfg", default="config.yaml")
+    ap.add_argument("--cfg", default="config2.yaml")
     args = ap.parse_args()
 
     cfg = load_yaml(args.cfg)
