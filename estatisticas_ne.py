@@ -1,158 +1,163 @@
-import torch
+#!/usr/bin/env python3
+"""
+estatisticas_ne.py
+──────────────────
+Avalia **modelos base (sem ensemble nem vetor de características)** treinados em
+k-fold, calcula métricas por fold e imprime apenas a estatística-t (média ± desvio
+dos folds).  Gera também um arquivo
+    modelos_kf/<DATASET>_<TMODEL>_ne/<DATASET>_<TMODEL>_ne_resultados.txt
+com o mesmo resumo.
+
+Diferenças em relação ao estatisticas.py “com ensemble”
+  • Usa CustomModel  (backbone puro)
+  • Usa CustomImageModule_kf  (somente imagens)
+  • Procura checkpoints na pasta *_ne
+"""
+
+# ───────────────────────── IMPORTS ────────────────────────── #
+import os, random, yaml, argparse
+from pathlib import Path
+from datetime import datetime
 import numpy as np
-import random
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pytorch_lightning as pl
-from torchmetrics import Accuracy, Precision, Recall, F1Score, ConfusionMatrix
+import torch
+from scipy import stats
+from torchmetrics import Accuracy, Precision, Recall, F1Score
+
+# ------------- módulos do projeto (ajuste se mudar o nome) -------------
 from model import CustomModel
 from kf_data import CustomImageModule_kf
-import yaml
-import os
+# ----------------------------------------------------------------------- #
 
-def load_hyperparameters(file_path='config.yaml'):
-    with open(file_path, 'r') as file:
-        return yaml.safe_load(file)
-
-def set_random_seeds(seed=42):
+# ------------------- utilidades rápidas -------------------------------- #
+def set_seeds(seed=42):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    random.seed(seed); np.random.seed(seed)
+    torch.manual_seed(seed); torch.cuda.manual_seed_all(seed)
 
-def plot_confusion_matrix(cm, save_path, title='Matriz de Confusão'):
-    plt.figure(figsize=(10, 7))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
-    plt.xlabel('Predito')
-    plt.ylabel('Real')
-    plt.title(title)
-    plt.savefig(save_path)
-    plt.close()
+def load_yaml(path="config.yaml"):
+    with open(path, "r") as f:
+        return yaml.safe_load(f)
 
-set_random_seeds()
-hyperparams = load_hyperparameters()
+def t_from_mean_std(mean, std, k, mu0=0.95):
+    """t (bilateral) comparando a média dos folds a µ₀."""
+    se = std / np.sqrt(k)
+    t_val = (mean - mu0) / se
+    p_val = stats.t.sf(abs(t_val), df=k-1) * 2
+    return t_val, p_val
+# ----------------------------------------------------------------------- #
 
-model_base_dir = os.path.join("modelos_kf", f"{hyperparams['NAME_DATASET']}_{hyperparams['TMODEL']}_ne")
+def main():
+    parser = argparse.ArgumentParser(
+        description="Avalia checkpoints *_ne (sem ensemble) e imprime t-teste.")
+    parser.add_argument("--cfg", default="config.yaml",
+                        help="Arquivo de hiperparâmetros do treino")
+    args = parser.parse_args()
 
-acc_list = []
-prec_list = []
-rec_list = []
-f1_list = []
-loss_list = []
-fold_metrics = {}
+    cfg = load_yaml(args.cfg)
+    set_seeds()
 
-for fold_idx in range(hyperparams['K_FOLDS']):
-    model_filename = f"fold_{fold_idx}_best_model.ckpt"
-    model_path = os.path.join(model_base_dir, model_filename)
-
-    if not os.path.exists(model_path):
-        print(f"[Fold {fold_idx}] Modelo não encontrado: {model_path}. Pulando.")
-        continue
-
-    print(f"[Fold {fold_idx}] Avaliando modelo: {model_path}")
-    model = CustomModel.load_from_checkpoint(model_path)
-    model.eval()
-
-    data_module = CustomImageModule_kf(
-        train_dir=hyperparams['TRAIN_DIR'],
-        test_dir=hyperparams['TEST_DIR'],
-        shape=hyperparams['SHAPE'],
-        batch_size=hyperparams['BATCH_SIZE'],
-        num_workers=hyperparams['NUM_WORKERS'],
-        n_splits=hyperparams['K_FOLDS'],
-        fold_idx=fold_idx
-    )
-    data_module.setup(stage='test')
-    test_loader = data_module.test_dataloader()
+    # ---- pasta onde estão os checkpoints sem ensemble ----
+    base_dir = Path("modelos_kf") / f"{cfg['NAME_DATASET']}_{cfg['TMODEL']}_ne"
+    if not base_dir.exists():
+        raise SystemExit(f"{base_dir} não encontrado.")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
 
-    criterion = torch.nn.CrossEntropyLoss()
-    all_preds, all_labels = [], []
-    total_loss = 0.0
-    total_samples = 0
+    accs, precs, recs, f1s, losses = ([] for _ in range(5))
 
-    with torch.no_grad():
-        for images, labels in test_loader:
-            images, labels = images.to(device), labels.to(device)
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-            total_loss += loss.item() * images.size(0)
-            total_samples += images.size(0)
+    for fold in range(cfg["K_FOLDS"]):
+        ckpt_list = sorted(base_dir.glob(f"fold_{fold}_best_model*.ckpt"))
+        if not ckpt_list:
+            print(f"⚠️  Fold {fold}: checkpoint ausente, pulando.")
+            continue
 
-            preds = torch.argmax(outputs, dim=1)
-            all_preds.extend(preds.cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
+        model = CustomModel.load_from_checkpoint(str(ckpt_list[0])).to(device).eval()
 
-    avg_test_loss = total_loss / total_samples
-    loss_list.append(avg_test_loss)
+        dm = CustomImageModule_kf(
+            train_dir=cfg["TRAIN_DIR"],
+            test_dir=cfg["TEST_DIR"],
+            shape=cfg["SHAPE"],
+            batch_size=cfg["BATCH_SIZE"],
+            num_workers=cfg["NUM_WORKERS"],
+            n_splits=cfg["K_FOLDS"],
+            fold_idx=fold,
+        )
+        dm.setup("test")
+        loader = dm.test_dataloader()
 
-    all_preds = torch.tensor(all_preds)
-    all_labels = torch.tensor(all_labels)
+        criterion = torch.nn.CrossEntropyLoss()
+        preds, labels = [], []
+        running_loss, n = 0.0, 0
 
-    num_classes = len(torch.unique(all_labels))
-    accuracy = Accuracy(task='multiclass', num_classes=num_classes)
-    precision = Precision(task='multiclass', num_classes=num_classes)
-    recall = Recall(task='multiclass', num_classes=num_classes)
-    f1 = F1Score(task='multiclass', num_classes=num_classes)
-    conf_matrix = ConfusionMatrix(task='multiclass', num_classes=num_classes)
+        with torch.no_grad():
+            for imgs, y in loader:
+                imgs, y = imgs.to(device), y.to(device)
 
-    acc_value = accuracy(all_preds, all_labels).item()
-    prec_value = precision(all_preds, all_labels).item()
-    rec_value = recall(all_preds, all_labels).item()
-    f1_value = f1(all_preds, all_labels).item()
-    conf_matrix_value = conf_matrix(all_preds, all_labels).cpu().numpy()
+                # rótulos 1-based?  converte para 0-based se necessário
+                if y.min() == 1 and y.max() == model.fc.out_features:
+                    y = y - 1
 
-    acc_list.append(acc_value)
-    prec_list.append(prec_value)
-    rec_list.append(rec_value)
-    f1_list.append(f1_value)
+                if y.max() >= model.fc.out_features:
+                    raise RuntimeError(
+                        f"Label fora de faixa no fold {fold}: y.max={y.max().item()} "
+                        f"≥ n_classes={model.fc.out_features}")
 
-    fold_metrics[fold_idx] = {
-        'acc': acc_value,
-        'prec': prec_value,
-        'rec': rec_value,
-        'f1': f1_value,
-        'loss': avg_test_loss
-    }
+                out = model(imgs)
+                running_loss += criterion(out, y).item() * imgs.size(0)
+                n += imgs.size(0)
+                preds.extend(out.argmax(1).cpu().numpy())
+                labels.extend(y.cpu().numpy())
 
-    print(f"[Fold {fold_idx}] Acurácia: {acc_value:.4f} | Precisão: {prec_value:.4f} | Recall: {rec_value:.4f} | F1: {f1_value:.4f} | Test Loss: {avg_test_loss:.4f}")
+        loss = running_loss / n
+        tp, tl = torch.tensor(preds), torch.tensor(labels)
+        ncls = len(torch.unique(tl))
 
-    matrix_filename = model_filename.replace(".ckpt", ".png")
-    matrix_path = os.path.join(model_base_dir, matrix_filename)
-    plot_confusion_matrix(conf_matrix_value, save_path=matrix_path, title=f"Matriz de Confusão - Fold {fold_idx}")
+        acc  = Accuracy(task="multiclass", num_classes=ncls)(tp, tl).item()
+        prec = Precision(task="multiclass", num_classes=ncls)(tp, tl).item()
+        rec  = Recall(task="multiclass", num_classes=ncls)(tp, tl).item()
+        f1   = F1Score(task="multiclass", num_classes=ncls)(tp, tl).item()
 
-def print_final_stats(metric_list, name):
-    metric_array = np.array(metric_list)
-    print(f"{name} por Fold: {metric_array}")
-    print(f"{name} Média: {metric_array.mean():.6f} | Desvio Padrão: {metric_array.std():.6f}\n")
-    return metric_array.mean(), metric_array.std()
+        accs.append(acc); precs.append(prec); recs.append(rec); f1s.append(f1); losses.append(loss)
+        print(f"[Fold {fold}] Acc={acc:.4f}  Loss={loss:.4f}")
 
-print("\n=== Estatísticas Finais ===")
-mean_acc, std_acc = print_final_stats(acc_list, "Acurácia")
-mean_prec, std_prec = print_final_stats(prec_list, "Precisão")
-mean_rec, std_rec = print_final_stats(rec_list, "Recall")
-mean_f1, std_f1 = print_final_stats(f1_list, "F1-score")
-mean_loss, std_loss = print_final_stats(loss_list, "Test Loss")
+    k = len(accs)
+    if k == 0:
+        raise SystemExit("Nenhum fold avaliado.")
 
-stats_filename = f"{hyperparams['NAME_DATASET']}_{hyperparams['TMODEL']}_ne_resultados.txt"
-stats_path = os.path.join(model_base_dir, stats_filename)
+    # ─── média / desvio ──
+    m_acc,  s_acc  = np.mean(accs),  np.std(accs,  ddof=1)
+    m_prec, s_prec = np.mean(precs), np.std(precs, ddof=1)
+    m_rec,  s_rec  = np.mean(recs),  np.std(recs,  ddof=1)
+    m_f1,   s_f1   = np.mean(f1s),   np.std(f1s,   ddof=1)
+    m_loss, s_loss = np.mean(losses),np.std(losses,ddof=1)
 
-with open(stats_path, 'w') as f:
-    for fold, metrics in fold_metrics.items():
-        f.write(f"Fold {fold}:\n")
-        f.write(f"  Acurácia: {metrics['acc']:.6f}\n")
-        f.write(f"  Precisão: {metrics['prec']:.6f}\n")
-        f.write(f"  Recall:   {metrics['rec']:.6f}\n")
-        f.write(f"  F1-score: {metrics['f1']:.6f}\n")
-        f.write(f"  Test Loss: {metrics['loss']:.6f}\n\n")
+    # ─── t-test (baseline µ₀ = 0.95 p/ acurácia, 0 p/ loss) ──
+    t_acc,  p_acc  = t_from_mean_std(m_acc,  s_acc,  k, mu0=0.95)
+    t_prec, p_prec = t_from_mean_std(m_prec, s_prec, k, mu0=0.95)
+    t_rec,  p_rec  = t_from_mean_std(m_rec,  s_rec,  k, mu0=0.95)
+    t_f1,   p_f1   = t_from_mean_std(m_f1,   s_f1,   k, mu0=0.95)
+    t_loss, p_loss = t_from_mean_std(m_loss, s_loss, k, mu0=0.0)
 
-    f.write("=== Métricas Finais ===\n")
-    f.write(f"Acurácia: Média={mean_acc:.6f}, Desvio={std_acc:.6f}\n")
-    f.write(f"Precisão: Média={mean_prec:.6f}, Desvio={std_prec:.6f}\n")
-    f.write(f"Recall:   Média={mean_rec:.6f}, Desvio={std_rec:.6f}\n")
-    f.write(f"F1-score: Média={mean_f1:.6f}, Desvio={std_f1:.6f}\n")
-    f.write(f"Test Loss: Média={mean_loss:.6f}, Desvio={std_loss:.6f}\n")
+    # ─── imprime apenas o teste-t ──
+    print("\n=== Estatística-t (bilateral) ===")
+    print(f"Acurácia: t({k-1}) = {t_acc:.2f},  p = {p_acc:.2e}")
+    print(f"Precisão: t({k-1}) = {t_prec:.2f}, p = {p_prec:.2e}")
+    print(f"Recall:   t({k-1}) = {t_rec:.2f},  p = {p_rec:.2e}")
+    print(f"F1-score: t({k-1}) = {t_f1:.2f},   p = {p_f1:.2e}")
+    print(f"Loss:     t({k-1}) = {t_loss:.2f}, p = {p_loss:.2e}")
+
+    # ─── salva txt com o mesmo resumo ──
+    out_txt = base_dir / f"{cfg['NAME_DATASET']}_{cfg['TMODEL']}_ne_resultados.txt"
+    with open(out_txt, "w") as f:
+        f.write(f"# Estatística-t – gerado em {datetime.now():%d/%m/%Y %H:%M:%S}\n")
+        f.write(f"# k = {k} folds, baseline µ₀ = 0.95 (accuracy) / 0.0 (loss)\n")
+        f.write(f"Acurácia t={t_acc:.2f} p={p_acc:.2e}\n")
+        f.write(f"Precisão t={t_prec:.2f} p={p_prec:.2e}\n")
+        f.write(f"Recall   t={t_rec:.2f} p={p_rec:.2e}\n")
+        f.write(f"F1-score t={t_f1:.2f} p={p_f1:.2e}\n")
+        f.write(f"Loss     t={t_loss:.2f} p={p_loss:.2e}\n")
+    print(f"\n✓ Resultado salvo em {out_txt}")
+
+if __name__ == "__main__":
+    main()
