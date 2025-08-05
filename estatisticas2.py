@@ -1,40 +1,43 @@
 #!/usr/bin/env python3
 """
-estatisticas.py – Avalia os melhores modelos de cada fold, calcula métricas,
-intervalos de confiança de 95 % (t-Student) e estatísticas-t, depois grava tudo
-num arquivo .txt (com carimbo de data-hora) e exibe no console.
+estatisticas.py
+Avalia os checkpoints de cada fold, calcula métricas, intervalos de confiança
+(95 % t-Student) e estatísticas-t contra um baseline configurável.
+Salva tudo em <dataset>_<modelo>_resultados.txt dentro da pasta modelos_kf/.
 """
 
-# -------------------------------------------------------------------------
+# -------------------------------------------------------------------- #
 # Imports
-# -------------------------------------------------------------------------
-import os
-import random
-from datetime import datetime
+# -------------------------------------------------------------------- #
+import os, random, yaml
 from pathlib import Path
-import shutil  # se precisar mover algo depois
-import yaml
+from datetime import datetime
 
 import numpy as np
 import torch
-import pytorch_lightning as pl
 from torchmetrics import Accuracy, Precision, Recall, F1Score, ConfusionMatrix
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy import stats  # IC95 + estatística-t
+from scipy import stats
 
 from model import CustomEnsembleModel
 from kf_data import CustomImageCSVModule_kf
 
-# -------------------------------------------------------------------------
-# Utilidades
-# -------------------------------------------------------------------------
-def load_hyperparameters(cfg_path: str = "config2.yaml"):
-    with open(cfg_path, "r") as f:
-        return yaml.safe_load(f)
+# -------------------------------------------------------------------- #
+# Configurações do teste t
+# -------------------------------------------------------------------- #
+MU0 = {           # hipótese nula (μ0) para cada métrica
+    "acc":  0.95,
+    "prec": 0.95,
+    "rec":  0.95,
+    "f1":   0.95,
+    "loss": 0.0,   # se quiser testar perda média > 0.01, mude aqui
+}
 
-
-def set_random_seeds(seed: int = 42):
+# -------------------------------------------------------------------- #
+# Funções utilitárias
+# -------------------------------------------------------------------- #
+def set_seeds(seed=42):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     random.seed(seed)
@@ -43,191 +46,164 @@ def set_random_seeds(seed: int = 42):
     torch.cuda.manual_seed_all(seed)
 
 
-def plot_confusion_matrix(cm, save_path: str, title: str = "Matriz de Confusão"):
+def load_cfg(path="config2.yaml"):
+    with open(path, "r") as f:
+        return yaml.safe_load(f)
+
+
+def plot_confmat(cm, path, title):
     plt.figure(figsize=(10, 7))
     sns.heatmap(cm, annot=True, fmt="d", cmap="Blues")
-    plt.xlabel("Predito")
-    plt.ylabel("Real")
-    plt.title(title)
+    plt.xlabel("Predito"); plt.ylabel("Real"); plt.title(title)
     plt.tight_layout()
-    plt.savefig(save_path)
-    plt.close()
+    plt.savefig(path); plt.close()
 
 
-def print_final_stats(metric_list, name):
-    arr = np.array(metric_list)
+def print_stats(values, name):
+    arr = np.array(values)
+    mean, std = arr.mean(), arr.std(ddof=1)
     print(f"{name} por Fold: {arr}")
-    print(f"{name} Média: {arr.mean():.4f} | Desvio Padrão: {arr.std(ddof=1):.4f}\n")
-    return arr.mean(), arr.std(ddof=1)
+    print(f"{name} Média: {mean:.4f} | Desvio Padrão: {std:.4f}\n")
+    return mean, std
 
 
 def ci95(mean, std, k):
-    """Retorna (low, high) do IC95% via t-Student."""
-    return stats.t.interval(
-        0.95, df=max(k - 1, 1), loc=mean, scale=std / np.sqrt(k)
-    )
+    return stats.t.interval(0.95, df=k-1, loc=mean, scale=std/np.sqrt(k))
 
 
-def t_stat(mean, std, k, mu0=0.0):
-    """t = (mean - mu0) / (std / sqrt(k))  (teste unilateral H0: μ = mu0)."""
+def t_test(mean, std, k, mu0):
     se = std / np.sqrt(k)
-    return np.nan if se == 0 else (mean - mu0) / se
+    t_stat = (mean - mu0) / se
+    p_val = stats.t.sf(abs(t_stat), df=k-1) * 2   # bilateral
+    return t_stat, p_val
 
 
-# -------------------------------------------------------------------------
-# Configuração inicial
-# -------------------------------------------------------------------------
-set_random_seeds()
-hyper = load_hyperparameters()  # assume config2.yaml na raiz
+# -------------------------------------------------------------------- #
+# Pipeline
+# -------------------------------------------------------------------- #
+def main():
+    set_seeds()
+    cfg = load_cfg()
 
-# Caminho base para salvar resultados do k-fold
-base_dir = Path("modelos_kf") / f"{hyper['NAME_DATASET']}_{hyper['TMODEL']}"
-base_dir.mkdir(parents=True, exist_ok=True)
+    base = Path("modelos_kf") / f"{cfg['NAME_DATASET']}_{cfg['TMODEL']}"
+    base.mkdir(parents=True, exist_ok=True)
 
-# Listas para métricas por fold
-acc_list, prec_list, rec_list, f1_list, loss_list = ([] for _ in range(5))
-fold_metrics = {}
+    # coletores por fold
+    accs, precs, recs, f1s, losses = ([] for _ in range(5))
+    fold_metrics = {}
 
-# -------------------------------------------------------------------------
-# Loop de avaliação por fold
-# -------------------------------------------------------------------------
-for fold in range(hyper["K_FOLDS"]):
-    ckpt_path = base_dir / f"fold_{fold}_best_model.ckpt"
-    if not ckpt_path.exists():
-        print(f"[Fold {fold}] – checkpoint não encontrado: {ckpt_path}")
-        continue
+    for fold in range(cfg["K_FOLDS"]):
+        ckpt = base / f"fold_{fold}_best_model.ckpt"
+        if not ckpt.exists():
+            print(f"[Fold {fold}] checkpoint ausente → pulando.")
+            continue
 
-    print(f"[Fold {fold}] Avaliando modelo: {ckpt_path}")
-    model = CustomEnsembleModel.load_from_checkpoint(str(ckpt_path))
-    model.eval()
+        print(f"[Fold {fold}] Avaliando {ckpt}")
+        model = CustomEnsembleModel.load_from_checkpoint(str(ckpt))
+        model.eval().to("cuda" if torch.cuda.is_available() else "cpu")
 
-    dm = CustomImageCSVModule_kf(
-        train_dir=hyper["TRAIN_DIR"],
-        test_dir=hyper["TEST_DIR"],
-        shape=hyper["SHAPE"],
-        batch_size=hyper["BATCH_SIZE"],
-        num_workers=hyper["NUM_WORKERS"],
-        n_splits=hyper["K_FOLDS"],
-        fold_idx=fold,
-    )
-    dm.setup(stage="test")
-    test_loader = dm.test_dataloader()
+        dm = CustomImageCSVModule_kf(
+            train_dir=cfg["TRAIN_DIR"],
+            test_dir=cfg["TEST_DIR"],
+            shape=cfg["SHAPE"],
+            batch_size=cfg["BATCH_SIZE"],
+            num_workers=cfg["NUM_WORKERS"],
+            n_splits=cfg["K_FOLDS"],
+            fold_idx=fold,
+        )
+        dm.setup("test")
+        test_loader = dm.test_dataloader()
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
+        criterion = torch.nn.CrossEntropyLoss()
+        preds, labels = [], []
+        tot_loss, n = 0.0, 0
 
-    criterion = torch.nn.CrossEntropyLoss()
-    all_preds, all_labels = [], []
-    running_loss, nsamples = 0.0, 0
+        with torch.no_grad():
+            for imgs, feats, y in test_loader:
+                imgs, feats, y = imgs.cuda(), feats.cuda(), y.cuda() if torch.cuda.is_available() else (imgs, feats, y)
+                out = model(imgs, feats)
+                tot_loss += criterion(out, y).item() * imgs.size(0)
+                n += imgs.size(0)
+                preds.extend(out.argmax(1).cpu().numpy())
+                labels.extend(y.cpu().numpy())
 
-    with torch.no_grad():
-        for images, feats, labels in test_loader:
-            images, feats, labels = images.to(device), feats.to(device), labels.to(device)
-            outputs = model(images, feats)
-            loss = criterion(outputs, labels)
-            running_loss += loss.item() * images.size(0)
-            nsamples += images.size(0)
+        avg_loss = tot_loss / n
+        tensor_p, tensor_l = torch.tensor(preds), torch.tensor(labels)
+        ncls = len(torch.unique(tensor_l))
 
-            preds = outputs.argmax(dim=1)
-            all_preds.extend(preds.cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
+        acc  = Accuracy(task="multiclass", num_classes=ncls)(tensor_p, tensor_l).item()
+        prec = Precision(task="multiclass", num_classes=ncls)(tensor_p, tensor_l).item()
+        rec  = Recall(task="multiclass", num_classes=ncls)(tensor_p, tensor_l).item()
+        f1   = F1Score(task="multiclass", num_classes=ncls)(tensor_p, tensor_l).item()
+        cm   = ConfusionMatrix(task="multiclass", num_classes=ncls)(tensor_p, tensor_l)
 
-    avg_loss = running_loss / nsamples
-    loss_list.append(avg_loss)
+        accs.append(acc); precs.append(prec); recs.append(rec); f1s.append(f1); losses.append(avg_loss)
+        fold_metrics[fold] = dict(acc=acc, prec=prec, rec=rec, f1=f1, loss=avg_loss)
 
-    all_preds = torch.tensor(all_preds)
-    all_labels = torch.tensor(all_labels)
-    nclass = len(torch.unique(all_labels))
+        plot_confmat(cm.cpu().numpy(), base / f"fold_{fold}_matrix.png", f"Fold {fold}")
 
-    acc  = Accuracy(task="multiclass", num_classes=nclass)(all_preds, all_labels).item()
-    prec = Precision(task="multiclass", num_classes=nclass)(all_preds, all_labels).item()
-    rec  = Recall(task="multiclass", num_classes=nclass)(all_preds, all_labels).item()
-    f1   = F1Score(task="multiclass", num_classes=nclass)(all_preds, all_labels).item()
-    cm   = ConfusionMatrix(task="multiclass", num_classes=nclass)(all_preds, all_labels)
+        print(f"[Fold {fold}] Acc={acc:.4f} | Prec={prec:.4f} | Rec={rec:.4f} | Loss={avg_loss:.4f}")
 
-    acc_list.append(acc)
-    prec_list.append(prec)
-    rec_list.append(rec)
-    f1_list.append(f1)
+    # ------------------------------------------------------------------ #
+    # Estatísticas finais
+    # ------------------------------------------------------------------ #
+    k = len(accs)
+    print("\n=== Estatísticas Finais ===")
+    m_acc,  s_acc  = print_stats(accs,  "Acurácia")
+    m_prec, s_prec = print_stats(precs, "Precisão")
+    m_rec,  s_rec  = print_stats(recs,  "Recall")
+    m_f1,   s_f1   = print_stats(f1s,   "F1-score")
+    m_loss, s_loss = print_stats(losses,"Test Loss")
 
-    fold_metrics[fold] = {"acc": acc, "prec": prec, "rec": rec, "f1": f1, "loss": avg_loss}
+    # IC 95 %
+    ci_acc  = ci95(m_acc,  s_acc,  k)
+    ci_prec = ci95(m_prec, s_prec, k)
+    ci_rec  = ci95(m_rec,  s_rec,  k)
+    ci_f1   = ci95(m_f1,   s_f1,   k)
+    ci_loss = ci95(m_loss, s_loss, k)
 
-    print(f"[Fold {fold}] Acurácia: {acc:.4f} | Precisão: {prec:.4f} | Recall: {rec:.4f} | Test Loss: {avg_loss:.4f}")
+    # Estatística-t e p-valor
+    t_acc,  p_acc  = t_test(m_acc,  s_acc,  k, MU0["acc"])
+    t_prec, p_prec = t_test(m_prec, s_prec, k, MU0["prec"])
+    t_rec,  p_rec  = t_test(m_rec,  s_rec,  k, MU0["rec"])
+    t_f1,   p_f1   = t_test(m_f1,   s_f1,   k, MU0["f1"])
+    t_loss, p_loss = t_test(m_loss, s_loss, k, MU0["loss"])
 
-    # salva matriz de confusão
-    plot_confusion_matrix(
-        cm.cpu().numpy(),
-        save_path=base_dir / f"fold_{fold}_best_model.png",
-        title=f"Confusion Matrix – Fold {fold}",
-    )
+    print("=== Estatística-t (bilateral) ===")
+    print(f"Acurácia: t({k-1}) = {t_acc:.2f},  p = {p_acc:.2e}")
+    print(f"Precisão: t({k-1}) = {t_prec:.2f}, p = {p_prec:.2e}")
+    print(f"Recall:   t({k-1}) = {t_rec:.2f},  p = {p_rec:.2e}")
+    print(f"F1-score: t({k-1}) = {t_f1:.2f},   p = {p_f1:.2e}")
+    print(f"Loss:     t({k-1}) = {t_loss:.2f}, p = {p_loss:.2e}")
 
-# -------------------------------------------------------------------------
-# Estatísticas agregadas
-# -------------------------------------------------------------------------
-print("\n=== Estatísticas Finais ===")
-mean_acc,  std_acc  = print_final_stats(acc_list,  "Acurácia")
-mean_prec, std_prec = print_final_stats(prec_list, "Precisão")
-mean_rec,  std_rec  = print_final_stats(rec_list,  "Recall")
-mean_f1,   std_f1   = print_final_stats(f1_list,   "F1-score")
-mean_loss, std_loss = print_final_stats(loss_list, "Test Loss")
+    # ------------------------------------------------------------------ #
+    # Salva em .txt
+    # ------------------------------------------------------------------ #
+    txt = base / f"{cfg['NAME_DATASET']}_{cfg['TMODEL']}_resultados.txt"
+    with open(txt, "w") as f:
+        f.write(f"Arquivo gerado em: {datetime.now():%d/%m/%Y – %H:%M:%S}\n\n")
+        for fold, m in fold_metrics.items():
+            f.write(f"Fold {fold}:\n")
+            f.write(f"  Acc  = {m['acc']:.4f}\n")
+            f.write(f"  Prec = {m['prec']:.4f}\n")
+            f.write(f"  Rec  = {m['rec']:.4f}\n")
+            f.write(f"  F1   = {m['f1']:.4f}\n")
+            f.write(f"  Loss = {m['loss']:.6f}\n\n")
 
-k = len(acc_list) or 1  # evita div/0 se algum fold faltou
+        def w(title, mean, std, ci, t, p):
+            f.write(f"{title}: Média={mean:.4f}, Desv={std:.4f}, "
+                    f"IC95%=[{ci[0]:.4f},{ci[1]:.4f}], "
+                    f"t({k-1})={t:.2f}, p={p:.2e}\n")
 
-# Intervalos de confiança 95 %
-ci_acc_low,  ci_acc_high  = ci95(mean_acc,  std_acc,  k)
-ci_prec_low, ci_prec_high = ci95(mean_prec, std_prec, k)
-ci_rec_low,  ci_rec_high  = ci95(mean_rec,  std_rec,  k)
-ci_f1_low,   ci_f1_high   = ci95(mean_f1,   std_f1,   k)
-ci_loss_low, ci_loss_high = ci95(mean_loss, std_loss, k)
+        f.write("=== Resumo ===\n")
+        w("Acurácia", m_acc, s_acc, ci_acc, t_acc, p_acc)
+        w("Precisão", m_prec, s_prec, ci_prec, t_prec, p_prec)
+        w("Recall  ", m_rec, s_rec, ci_rec, t_rec, p_rec)
+        w("F1-score", m_f1, s_f1, ci_f1, t_f1, p_f1)
+        w("Loss    ", m_loss, s_loss, ci_loss, t_loss, p_loss)
 
-# Estatísticas-t (H0: μ = 0)
-t_acc  = t_stat(mean_acc,  std_acc,  k)
-t_prec = t_stat(mean_prec, std_prec, k)
-t_rec  = t_stat(mean_rec,  std_rec,  k)
-t_f1   = t_stat(mean_f1,   std_f1,   k)
-t_loss = t_stat(mean_loss, std_loss, k)
+    print(f"\n✓ Resultados completos salvos em {txt}")
 
-print("=== Estatística-t (H0: μ = 0) ===")
-print(f"Acurácia: t({k-1}) = {t_acc:.4f}")
-print(f"Precisão: t({k-1}) = {t_prec:.4f}")
-print(f"Recall:   t({k-1}) = {t_rec:.4f}")
-print(f"F1-score: t({k-1}) = {t_f1:.4f}")
-print(f"TestLoss: t({k-1}) = {t_loss:.4f}")
 
-# -------------------------------------------------------------------------
-# Gravação em arquivo .txt
-# -------------------------------------------------------------------------
-txt_path = base_dir / f"{hyper['NAME_DATASET']}_{hyper['TMODEL']}_resultados.txt"
-with open(txt_path, "w") as f:
-    f.write(f"Arquivo gerado em: {datetime.now():%d/%m/%Y – %H:%M:%S}\n\n")
-
-    for fold, m in fold_metrics.items():
-        f.write(f"Fold {fold}:\n")
-        f.write(f"  Acurácia: {m['acc']:.4f}\n")
-        f.write(f"  Precisão: {m['prec']:.4f}\n")
-        f.write(f"  Recall:   {m['rec']:.4f}\n")
-        f.write(f"  F1-score: {m['f1']:.4f}\n")
-        f.write(f"  Test Loss: {m['loss']:.6f}\n\n")
-
-    f.write("=== Métricas Finais ===\n")
-    f.write(f"Acurácia: Média={mean_acc:.4f}, Desv={std_acc:.4f}\n")
-    f.write(f"Precisão: Média={mean_prec:.4f}, Desv={std_prec:.4f}\n")
-    f.write(f"Recall:   Média={mean_rec:.4f}, Desv={std_rec:.4f}\n")
-    f.write(f"F1-score: Média={mean_f1:.4f}, Desv={std_f1:.4f}\n")
-    f.write(f"Test Loss: Média={mean_loss:.6f}, Desv={std_loss:.6f}\n\n")
-
-    f.write("=== Intervalo de Confiança 95 % (t-Student) ===\n")
-    f.write(f"Acurácia: [{ci_acc_low:.4f}, {ci_acc_high:.4f}]\n")
-    f.write(f"Precisão: [{ci_prec_low:.4f}, {ci_prec_high:.4f}]\n")
-    f.write(f"Recall:   [{ci_rec_low:.4f}, {ci_rec_high:.4f}]\n")
-    f.write(f"F1-score: [{ci_f1_low:.4f}, {ci_f1_high:.4f}]\n")
-    f.write(f"Test Loss: [{ci_loss_low:.6f}, {ci_loss_high:.6f}]\n\n")
-
-    f.write("=== Estatística-t (H0: μ = 0) ===\n")
-    f.write(f"Acurácia: t({k-1}) = {t_acc:.4f}\n")
-    f.write(f"Precisão: t({k-1}) = {t_prec:.4f}\n")
-    f.write(f"Recall:   t({k-1}) = {t_rec:.4f}\n")
-    f.write(f"F1-score: t({k-1}) = {t_f1:.4f}\n")
-    f.write(f"Test Loss: t({k-1}) = {t_loss:.4f}\n")
-
-print(f"\n✓ Resultados completos salvos em {txt_path}")
+if __name__ == "__main__":
+    main()
