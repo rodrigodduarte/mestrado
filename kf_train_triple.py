@@ -113,21 +113,22 @@ def train_model(config=None):
 
         trainer.fit(model, dm)
 
-        # -----------------------------------------------------------
-        # abortado?  não valida / não testa, segue para o próximo run
-        # -----------------------------------------------------------
-        if early_stop_callback.stop_training:
+        # ──────────────────────────────────────────────────────────────
+        # Se o EarlyStopCallback cancelou o treino, não avalia nem testa
+        # ──────────────────────────────────────────────────────────────
+        if early_stop_callback.should_stop_training():
             wandb.log({"status": "early_stopped"})
             return
 
         # ─────────── avaliação do melhor checkpoint ───────────
         best_model = CustomModelTriple.load_from_checkpoint(
-            ckpt_cb.best_model_path)
+            ckpt_cb.best_model_path
+        )
         val_metrics  = trainer.validate(best_model, dm)[0]
         test_metrics = trainer.test(best_model, dm)[0]
-        wandb.log({f"fold0_{k}": v for k, v in {**val_metrics,
-                                                **test_metrics}.items()})
 
+        wandb.log({f"fold0_{k}": v
+                   for k, v in {**val_metrics, **test_metrics}.items()})
 # ╭───────────────── entrada CLI ─────────────────╮
 if __name__ == "__main__":
     set_random_seeds()
