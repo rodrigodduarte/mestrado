@@ -94,8 +94,8 @@ def train_model(config=None):
 
         early_stop_callback = EarlyStopCallback(
             metric_name="val_loss",  # Métrica a ser monitorada
-            threshold=0.5,          # Valor limite
-            target_epoch=3          # Época em que verificar (índice começa em 0)
+            threshold=1,          # Valor limite
+            target_epoch=5          # Época em que verificar (índice começa em 0)
         )
 
         trainer = pl.Trainer(
@@ -137,11 +137,10 @@ if __name__ == "__main__":
         'method': 'random',
         'metric': {'name': 'val_loss', 'goal': 'minimize'},
         'parameters': {
-            'learning_rate'          : {'min': 1e-5,  'max': 1e-4, 'distribution': 'log_uniform_values'},
+            'learning_rate'          : {'min': 1e-6,  'max': 1e-4, 'distribution': 'log_uniform_values'},
             'weight_decay'           : {'min': 1e-6,  'max': 1e-3, 'distribution': 'log_uniform_values'},
             'optimizer_momentum'     : {'min': 0.92,  'max': 0.99, 'distribution': 'uniform'},
-            'mlp_vector_model_scale' : {'min': 0.8,   'max': 1.3,  'distribution': 'uniform'},
-            'layer_scale'            : {'min': 0.75,  'max': 3.0,  'distribution': 'uniform'},
+            'layer_scale'            : {'min': 0.5,   'max': 4.0,  'distribution': 'uniform'},
             'drop_path_rate'         : {'min': 0.0,   'max': 0.5,  'distribution': 'uniform'},
             'label_smoothing'        : {'min': 0.0,   'max': 0.2,  'distribution': 'uniform'},
         }
