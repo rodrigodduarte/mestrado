@@ -34,7 +34,7 @@ def train_model():
     k_splits = hyperparams['K_FOLDS']
     metrics_history = {}
 
-    run_dir = os.path.join("modelos_kf", f"{hyperparams['NAME_DATASET']}_{hyperparams['TMODEL']}")
+    run_dir = os.path.join("modelos_kf", f"{hyperparams['NAME_DATASET']}_triple")
     os.makedirs(run_dir, exist_ok=True)
 
     for fold in range(k_splits):
