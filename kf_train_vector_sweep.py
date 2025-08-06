@@ -29,7 +29,7 @@ from kf_data import CustomImageCSVModule_kf
 from callbacks import EarlyStoppingAtSpecificEpoch
 
 # ╭──────────────── utilidades ───────────────╮
-def hyperparams(path="config.yaml"):
+def hyperparams(path="config2.yaml"):
     with open(path, "r") as f: return yaml.safe_load(f)
 
 def fix_seeds(seed=42):
