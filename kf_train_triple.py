@@ -26,7 +26,7 @@ import wandb
 from model import CustomModelTriple
 from kf_data import CustomImageCSVModule_kf
 # callbacks auxiliares (se quiser manter) —
-from callbacks import EarlyStoppingAtSpecificEpoch, SaveBestOrLastModelCallback, EarlyStopCallback
+from callbacks import EarlyStoppingAtSpecificEpoch, SaveBestOrLastModelCallback
 
 # ╭──────────────── utilidades ───────────────╮
 def load_hyperparameters(path="config.yaml"):
@@ -83,21 +83,6 @@ def train_model(config=None):
         )
         dm.setup(stage="fit")
 
-        # Callback de Early Stopping
-        epoch_callback = EarlyStoppingAtSpecificEpoch(
-            patience=2,
-            threshold=1e-3,
-            monitor="val_loss",
-            mode="min",
-            verbose=True
-        )
-
-        early_stop_callback = EarlyStopCallback(
-            metric_name="val_loss",  # Métrica a ser monitorada
-            threshold=0.8,          # Valor limite
-            target_epoch=7          # Época em que verificar (índice começa em 0)
-        )
-
         trainer = pl.Trainer(
             logger        = wandb_logger,
             log_every_n_steps = 10,
@@ -105,30 +90,19 @@ def train_model(config=None):
             devices       = hp["DEVICES"],
             precision     = hp["PRECISION"],
             max_epochs    = hp["MAX_EPOCHS"],
-            callbacks     = [TQDMProgressBar(leave=True),
-                            ckpt_cb,
-                            epoch_callback,
-                            early_stop_callback]
+            callbacks     = [TQDMProgressBar(leave=True), ckpt_cb]
         )
 
         trainer.fit(model, dm)
 
-        # ──────────────────────────────────────────────────────────────
-        # Se o EarlyStopCallback cancelou o treino, não avalia nem testa
-        # ──────────────────────────────────────────────────────────────
-        if early_stop_callback.should_stop_training():
-            wandb.log({"status": "early_stopped"})
-            return
-
         # ─────────── avaliação do melhor checkpoint ───────────
-        best_model = CustomModelTriple.load_from_checkpoint(
-            ckpt_cb.best_model_path
-        )
+        best_model = CustomModelTriple.load_from_checkpoint(ckpt_cb.best_model_path)
         val_metrics  = trainer.validate(best_model, dm)[0]
         test_metrics = trainer.test(best_model, dm)[0]
 
-        wandb.log({f"fold0_{k}": v
-                   for k, v in {**val_metrics, **test_metrics}.items()})
+        wandb.log({f"fold0_{k}": v for k, v in {**val_metrics, **test_metrics}.items()})
+
+
 # ╭───────────────── entrada CLI ─────────────────╮
 if __name__ == "__main__":
     set_random_seeds()
