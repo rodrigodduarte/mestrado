@@ -604,3 +604,150 @@ class CustomModelTriple(pl.LightningModule):
                                       betas=self.optimizer_momentum)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.hparams.epochs)
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
+
+import torch
+from torch import nn
+import torch.nn.functional as F
+import torch.optim as optim
+import pytorch_lightning as pl
+from torchmetrics import Accuracy, F1Score, Precision, Recall, ConfusionMatrix
+from torchmetrics.classification import MulticlassConfusionMatrix
+
+
+class CustomVectorModel(pl.LightningModule):
+    """
+    Versão 'only-vector' ─ compatível com a assinatura do modelo triplo.
+
+    forward(**x, features**):
+        • ignora a entrada de imagem (x) se for fornecida
+        • passa apenas o vetor de características pelo MLP
+    """
+    def __init__(self,
+                 name_dataset: str,
+                 shape: tuple,                 # mantido p/ compat.
+                 epochs: int,
+                 learning_rate: float,
+                 features_dim: int,
+                 drop_path_rate: float,        # mantido, mas não usado
+                 num_classes: int,
+                 label_smoothing: float,
+                 optimizer_momentum: tuple,
+                 weight_decay: float,
+                 layer_scale: float):
+        super().__init__()
+        self.save_hyperparameters()
+
+        self.num_classes   = num_classes
+        self.features_dim  = features_dim
+        self.layer_scale   = layer_scale
+        self.learning_rate = learning_rate
+        self.weight_decay  = weight_decay
+        self.optimizer_momentum = optimizer_momentum
+
+        # ── métricas ───────────────────────────────────────────
+        self.train_accuracy = Accuracy(task="multiclass", num_classes=num_classes)
+        self.val_accuracy   = Accuracy(task="multiclass", num_classes=num_classes)
+        self.test_accuracy  = Accuracy(task="multiclass", num_classes=num_classes)
+
+        self.train_f1 = F1Score(task="multiclass", num_classes=num_classes)
+        self.val_f1   = F1Score(task="multiclass", num_classes=num_classes)
+        self.test_f1  = F1Score(task="multiclass", num_classes=num_classes)
+
+        self.train_precision = Precision(task="multiclass", num_classes=num_classes)
+        self.val_precision   = Precision(task="multiclass", num_classes=num_classes)
+        self.test_precision  = Precision(task="multiclass", num_classes=num_classes)
+
+        self.train_recall = Recall(task="multiclass", num_classes=num_classes)
+        self.val_recall   = Recall(task="multiclass", num_classes=num_classes)
+        self.test_recall  = Recall(task="multiclass", num_classes=num_classes)
+
+        self.test_confusion_matrix = MulticlassConfusionMatrix(num_classes=num_classes)
+
+        # ── MLP que opera apenas no vetor ─────────────────────
+        scaled_dim = int(features_dim * layer_scale)
+        self.vector_mlp = nn.Sequential(
+            nn.LayerNorm(features_dim),
+            nn.Linear(features_dim, scaled_dim),
+            nn.GELU(),
+            nn.Dropout(0.3),
+            nn.LayerNorm(scaled_dim),
+            nn.Linear(scaled_dim, num_classes)
+        )
+
+        self.fn_loss = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+
+    # ---------- forward ----------
+    def forward(self, x, features=None):
+        """
+        Para compatibilidade com o pipeline existente, aceita:
+            forward(features)                     ← chamadas diretas
+            forward(images, features)            ← pipeline triplo
+        O argumento 'x' (imagens) é ignorado.
+        """
+        if features is None:           # chamada direta forward(features)
+            features = x
+        return self.vector_mlp(features)
+
+    # ---------- passos comuns ----------
+    def _common_step(self, batch, _):
+        # datamodule deve fornecer apenas (features, labels)
+        if len(batch) == 2:
+            features, labels = batch
+        else:                          # compatível com (images, features, labels)
+            _, features, labels = batch
+        logits = self.forward(features)         # imagens ignoradas
+        loss   = self.fn_loss(logits, labels)
+        preds  = torch.argmax(logits, 1)
+        return loss, preds, labels
+
+    def training_step(self, batch, batch_idx):
+        loss, preds, labels = self._common_step(batch, batch_idx)
+        self.train_accuracy(preds, labels)
+        self.log("train_loss", loss,  on_epoch=True, prog_bar=True)
+        self.log("train_accuracy", self.train_accuracy, on_epoch=True, prog_bar=True)
+        return {"loss": loss}
+
+    def validation_step(self, batch, batch_idx):
+        loss, preds, labels = self._common_step(batch, batch_idx)
+        self.val_accuracy(preds, labels)
+        self.log("val_loss", loss, on_epoch=True, prog_bar=True)
+        self.log("val_accuracy", self.val_accuracy, on_epoch=True, prog_bar=True)
+
+    def test_step(self, batch, batch_idx):
+        loss, preds, labels = self._common_step(batch, batch_idx)
+        self.test_accuracy(preds, labels)
+        self.test_f1(preds, labels)
+        self.test_precision(preds, labels)
+        self.test_recall(preds, labels)
+        self.test_confusion_matrix(preds, labels)
+
+        self.log("test_loss", loss, prog_bar=True, on_epoch=True)
+        self.log("test_accuracy", self.test_accuracy.compute(), prog_bar=True)
+        self.log("test_f1", self.test_f1.compute(), prog_bar=True)
+        self.log("test_precision", self.test_precision.compute(), prog_bar=True)
+        self.log("test_recall", self.test_recall.compute(), prog_bar=True)
+
+        return {"test_loss": loss}
+
+    def on_test_epoch_end(self):
+        self.test_accuracy.reset()
+        self.test_f1.reset()
+        self.test_precision.reset()
+        self.test_recall.reset()
+        cm = self.test_confusion_matrix.compute().cpu().numpy()
+        self.test_confusion_matrix.reset()
+        print("✅ Matriz de Confusão calculada.")
+        return cm
+
+    # ---------- otimização ----------
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(
+            self.parameters(),
+            lr=self.learning_rate,
+            weight_decay=self.weight_decay,
+            betas=self.optimizer_momentum
+        )
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=self.hparams.epochs
+        )
+        return {"optimizer": optimizer, "lr_scheduler": scheduler}
