@@ -606,7 +606,7 @@ class CustomModelTriple(pl.LightningModule):
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
 
-class CustomVectorModel(pl.LightningModule):
+class ReLuMLP2L(pl.LightningModule):
     def __init__(self, features_dim, num_classes,
                  hidden_factor=4, p_drop=0.3,
                  lr=5e-5, wd=1e-4, label_smoothing=0.0):
@@ -617,7 +617,7 @@ class CustomVectorModel(pl.LightningModule):
         self.net = nn.Sequential(
             nn.LayerNorm(features_dim),
             nn.Linear(features_dim, h),
-            nn.GELU(inplace=True),
+            nn.ReLU(inplace=True),
             nn.Dropout(p_drop),
             nn.Linear(h, num_classes)
         )
