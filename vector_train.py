@@ -19,7 +19,7 @@ import os, random, yaml, torch, pytorch_lightning as pl, numpy as np
 from pytorch_lightning.callbacks import ModelCheckpoint, TQDMProgressBar
 
 # projeto
-from model import CustomVectorModel                # ← novo modelo
+from model import ReLuMLP2L                # ← novo modelo
 from kf_data import CustomImageCSVModule_kf
 from callbacks import EarlyStoppingAtSpecificEpoch
 
@@ -66,7 +66,7 @@ def train_model(cfg_path="config.yaml"):
             verbose    = True
         )
 
-        model = CustomVectorModel(
+        model = ReLuMLP2L(
             name_dataset    = hp["NAME_DATASET"],
             shape           = hp["SHAPE"],
             epochs          = hp["MAX_EPOCHS"],
