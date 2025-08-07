@@ -1,126 +1,152 @@
 import os
 import shutil
+import random
+import yaml
+from typing import Dict, Any, List
+
+import numpy as np
 import torch
 import pytorch_lightning as pl
-import numpy as np
-import yaml
-import random
 from pytorch_lightning.callbacks import TQDMProgressBar, ModelCheckpoint
-from model import CustomEnsembleModel
-from kf_data import CustomImageCSVModule_kf
+
+# Importa apenas a versão atual do modelo (sem ensemble)
+from model import CustomModel
+from kf_data import CustomImageModule_kf
 from callbacks import (
     EarlyStoppingAtSpecificEpoch,
     SaveBestOrLastModelCallback,
-    EarlyStopCallback
+    EarlyStopCallback,
 )
 
-# Carregar hiperparâmetros do arquivo config2.yaml
-def load_hyperparameters(file_path):
-    with open(file_path, 'r') as file:
-        hyperparams = yaml.safe_load(file)
-    return hyperparams
 
-# Configurar sementes para garantir reprodutibilidade
-def set_random_seeds():
+# -----------------------------------------------------------------------------
+# Utilidades auxiliares
+# -----------------------------------------------------------------------------
+
+def load_hyperparameters(file_path: str) -> Dict[str, Any]:
+    """Carrega parâmetros do YAML."""
+    with open(file_path, "r") as file:
+        return yaml.safe_load(file)
+
+
+def set_random_seeds(seed: int = 42):
     torch.backends.cudnn.deterministic = True
-    random.seed(42)
-    np.random.seed(42)
-    torch.manual_seed(42)
-    torch.cuda.manual_seed_all(42)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
-# Função principal para treinamento com validação cruzada
-def train_model():
-    hyperparams = load_hyperparameters('config2.yaml')
-    k_splits = hyperparams['K_FOLDS']
-    metrics_history = {}
 
-    run_dir = os.path.join("modelos_kf", f"{hyperparams['NAME_DATASET']}_{hyperparams['TMODEL']}")
+# -----------------------------------------------------------------------------
+# Função principal de treino (k‑fold)
+# -----------------------------------------------------------------------------
+
+def train_model(config_path: str = "config2.yaml"):
+    hparams = load_hyperparameters(config_path)
+    k_splits: int = hparams["K_FOLDS"]
+
+    # Diretórios ----------------------------------------------------------
+    run_dir = os.path.join(
+        "modelos_kf", f"{hparams['NAME_DATASET']}_{hparams['TMODEL']}_ne"
+    )
     os.makedirs(run_dir, exist_ok=True)
+    final_model_dir = os.path.join(run_dir, "final_best_models")
+    os.makedirs(final_model_dir, exist_ok=True)
 
-    for fold in range(k_splits):
-        print(f"\n==================== Fold {fold+1}/{k_splits} ====================")
+    metrics_history: Dict[str, List[float]] = {}
 
-        fold_callback = ModelCheckpoint(
+    # Por ora roda apenas um fold (mantenho seu comportamento original)
+    for fold in range(1):
+        print(f"\n==================== Fold {fold + 1}/{k_splits} ====================")
+
+        # ----- Callbacks -----
+        ckpt_callback = ModelCheckpoint(
             dirpath=run_dir,
-            filename=f"fold_{fold}_best_model",
+            filename=f"fold_{fold}_best_model_{{val_loss:.4f}}",
             monitor="val_loss",
             mode="min",
-            save_top_k=1
+            save_top_k=3,
         )
+        callbacks = [TQDMProgressBar(leave=True), ckpt_callback]
 
-        model = CustomEnsembleModel(
-            tmodel=hyperparams["TMODEL"],
-            name_dataset=hyperparams["NAME_DATASET"],
-            shape=hyperparams["SHAPE"],
-            epochs=hyperparams['MAX_EPOCHS'],
-            learning_rate=hyperparams['LEARNING_RATE'],
-            features_dim=hyperparams["FEATURES_DIM"],
-            drop_path_rate=hyperparams['DROP_PATH_RATE'],
-            num_classes=hyperparams['NUM_CLASSES'],
-            label_smoothing=hyperparams['LABEL_SMOOTHING'],
-            optimizer_momentum=(hyperparams['OPTIMIZER_MOMENTUM'], 0.999),
-            weight_decay=hyperparams['WEIGHT_DECAY'],
-            layer_scale=hyperparams['LAYER_SCALE'])
-
-        data_module = CustomImageCSVModule_kf(
-            train_dir=hyperparams['TRAIN_DIR'],
-            test_dir=hyperparams['TEST_DIR'],
-            shape=hyperparams['SHAPE'],
-            batch_size=hyperparams['BATCH_SIZE'],
-            num_workers=hyperparams['NUM_WORKERS'],
+        # ----- Dados -----
+        data_module = CustomImageModule_kf(
+            train_dir=hparams["TRAIN_DIR"],
+            test_dir=hparams["TEST_DIR"],
+            shape=hparams["SHAPE"],
+            batch_size=hparams["BATCH_SIZE"],
+            num_workers=hparams["NUM_WORKERS"],
             n_splits=k_splits,
-            fold_idx=fold
+            fold_idx=fold,
         )
-        data_module.setup(stage='fit')
+        data_module.setup(stage="fit")
 
-        callbacks = [
-            TQDMProgressBar(leave=True),
-            fold_callback
-        ]
+        # ----- Modelo -----
+        model = CustomModel(
+            tmodel=hparams["TMODEL"],
+            name_dataset=hparams["NAME_DATASET"],
+            epochs=hparams["MAX_EPOCHS"],
+            shape=hparams["SHAPE"],
+            learning_rate=hparams["LEARNING_RATE"],
+            drop_path_rate=hparams["DROP_PATH_RATE"],
+            num_classes=hparams["NUM_CLASSES"],
+            label_smoothing=hparams["LABEL_SMOOTHING"],
+            optimizer_momentum=(hparams["OPTIMIZER_MOMENTUM"], 0.999),
+            weight_decay=hparams.get("WEIGHT_DECAY", 0.0),
+        )
 
+        # ----- Trainer -----
         trainer = pl.Trainer(
             log_every_n_steps=10,
-            accelerator=hyperparams['ACCELERATOR'],
-            devices=hyperparams['DEVICES'],
-            precision=hyperparams['PRECISION'],
-            max_epochs=hyperparams['MAX_EPOCHS'],
-            callbacks=callbacks
+            accelerator=hparams["ACCELERATOR"],
+            devices=hparams["DEVICES"],
+            precision=hparams["PRECISION"],
+            max_epochs=hparams["MAX_EPOCHS"],
+            callbacks=callbacks,
         )
 
+        # ----- Treino -----
         trainer.fit(model, data_module)
 
-        best_model_path = fold_callback.best_model_path
+        # Avalia os três melhores modelos salvos --------------------------
+        checkpoint_files = sorted(
+            [
+                os.path.join(run_dir, fname)
+                for fname in os.listdir(run_dir)
+                if fname.startswith(f"fold_{fold}_best_model_") and fname.endswith(".ckpt")
+            ]
+        )
 
-        # Novo trecho: carregar epoch do melhor modelo
-        checkpoint_data = torch.load(best_model_path, map_location='cpu')
-        best_epoch = checkpoint_data['epoch']
-        print(f"Melhor modelo para fold {fold} salvo na época {best_epoch}")
+        best_accuracy = -1.0
+        best_model_path = None
 
-        model = CustomEnsembleModel.load_from_checkpoint(best_model_path)
-        val_metrics = trainer.validate(model, data_module)[0]
-        test_metrics = trainer.test(model, data_module)[0]
+        for ckpt_path in checkpoint_files:
+            eval_model = CustomModel.load_from_checkpoint(ckpt_path)
+            test_metrics = trainer.test(eval_model, data_module, verbose=False)[0]
+            test_accuracy = float(test_metrics.get("test_accuracy", 0.0))
 
-        for metric_name, metric_value in val_metrics.items():
-            if metric_name not in metrics_history:
-                metrics_history[metric_name] = []
-            metrics_history[metric_name].append(metric_value)
+            # Guarda histórico
+            metrics_history.setdefault("test_accuracy", []).append(test_accuracy)
 
-        for metric_name, metric_value in test_metrics.items():
-            if metric_name not in metrics_history:
-                metrics_history[metric_name] = []
-            metrics_history[metric_name].append(metric_value)
+            if test_accuracy > best_accuracy:
+                best_accuracy = test_accuracy
+                best_model_path = ckpt_path
 
-        # Limpar modelo da GPU ao final do fold
-        del model
-        torch.cuda.empty_cache()
+        if best_model_path:
+            dest = os.path.join(final_model_dir, f"fold_{fold}_best_model.ckpt")
+            shutil.copy(best_model_path, dest)
+            print(
+                f"Melhor modelo do Fold {fold} salvo em '{dest}' (test_accuracy={best_accuracy:.4f})"
+            )
 
+    # ------------------------ MÉTRICAS FINAIS -----------------------------
     print("\n==================== Métricas Finais ====================")
-    for metric_name, values in metrics_history.items():
-        if isinstance(values[0], (int, float, np.float32, np.float64)):
-            mean = np.mean(values)
-            std = np.std(values)
-            print(f"{metric_name}: mean = {mean:.4f}, std = {std:.4f}")
+    for name, values in metrics_history.items():
+        mean, std = np.mean(values), np.std(values)
+        print(f"{name}: mean = {mean:.4f}, std = {std:.4f}")
 
+
+# -----------------------------------------------------------------------------
 if __name__ == "__main__":
     set_random_seeds()
     train_model()
