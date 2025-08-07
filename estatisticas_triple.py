@@ -85,7 +85,7 @@ def main():
     set_seeds()
     cfg = load_cfg()
 
-    base = Path("modelos_kf") / f"{cfg['NAME_DATASET']}_{cfg['TMODEL']}"
+    base = Path("modelos_kf") / f"{cfg['NAME_DATASET']}_triple"
     base.mkdir(parents=True, exist_ok=True)
 
     # coletores por fold
@@ -179,7 +179,7 @@ def main():
     # ------------------------------------------------------------------ #
     # Salva em .txt
     # ------------------------------------------------------------------ #
-    txt = base / f"{cfg['NAME_DATASET']}_{cfg['TMODEL']}_resultados.txt"
+    txt = base / f"{cfg['NAME_DATASET']}_triple_resultados.txt"
     with open(txt, "w") as f:
         f.write(f"Arquivo gerado em: {datetime.now():%d/%m/%Y – %H:%M:%S}\n\n")
         for fold, m in fold_metrics.items():
