@@ -10,7 +10,7 @@ CM_PATH: /home/rodrigoduarte/Documentos/projeto/matriz_de_confusao
 
 
 # Hiperparâmetros relacionados à configuração do modelo
-TMODEL: "swint_t"
+TMODEL: "convnext_t"
 SHAPE: [224, 224]
 FEATURES_DIM: 648
 HIDDEN_LAYERS: 2
@@ -30,5 +30,5 @@ K_FOLDS: 5
 # Configurações de hardware e execução
 NUM_WORKERS: 4
 ACCELERATOR: "gpu"
-DEVICES: [1]
+DEVICES: [0]
 PRECISION: "16-mixed"
