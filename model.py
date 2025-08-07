@@ -24,7 +24,7 @@ from compact_transform.src import cct_14_7x2_224, cct_14_7x2_384, cct_14_7x2_384
 
 
 class CustomModel(pl.LightningModule):
-    def __init__(self, tmodel, name_dataset, epochs, shape, learning_rate,
+    def __init__(self, tmodel, name_dataset, epochs, shape, learning_rate, scale_factor,
                  drop_path_rate, num_classes, label_smoothing, optimizer_momentum):
         
         super(CustomModel, self).__init__()
@@ -36,6 +36,7 @@ class CustomModel(pl.LightningModule):
         self.epochs = epochs
         self.shape = shape
         self.learning_rate = learning_rate
+        self.scale_factor = scale_factor
         self.drop_path_rate = drop_path_rate
         self.num_classes = num_classes
         self.label_smoothing = label_smoothing
