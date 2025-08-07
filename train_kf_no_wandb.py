@@ -38,7 +38,7 @@ def set_random_seeds(seed: int = 42):
 
 
 # -----------------------------------------------------------------------------
-# Função principal de treino (k-fold)
+# Função principal de treino (k‑fold)
 # -----------------------------------------------------------------------------
 
 def train_model(config_path: str = "config.yaml"):
