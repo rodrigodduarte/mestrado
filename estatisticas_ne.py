@@ -99,7 +99,7 @@ def main():
             continue
 
         print(f"[Fold {fold}] Avaliando {ckpt}")
-        model = CustomModel.load_from_checkpoint(str(ckpt))
+        model = CustomModel.load_from_checkpoint(str(ckpt), scale_factor=1.0)
         model.eval().to("cuda" if torch.cuda.is_available() else "cpu")
 
         dm = CustomImageCSVModule_kf(
