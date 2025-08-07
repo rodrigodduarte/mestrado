@@ -24,248 +24,142 @@ from compact_transform.src import cct_14_7x2_224, cct_14_7x2_384, cct_14_7x2_384
 
 
 class CustomModel(pl.LightningModule):
-    def __init__(self, tmodel, name_dataset, epochs, shape, learning_rate, scale_factor,
-                 drop_path_rate, num_classes, label_smoothing, optimizer_momentum):
-        
-        super(CustomModel, self).__init__()
+    """Modelo padronizado (idêntica interface ao CustomEnsembleModel) **sem** concatenação de
+    vetores de características. Somente dois backbones suportados:
+        * convnext_t  — ConvNeXt Tiny
+        * swint_t     — Swin Transformer Tiny
+    """
 
+    def __init__(
+        self,
+        tmodel: str,               # "convnext_t" ou "swint_t"
+        name_dataset: str,
+        shape: tuple,
+        epochs: int,
+        learning_rate: float,
+        drop_path_rate: float,
+        num_classes: int,
+        label_smoothing: float,
+        optimizer_momentum: tuple,
+        weight_decay: float = 0.0,
+        scale_factor: float = 1.0,  # mantido apenas p/ compatibilidade de checkpoints
+    ) -> None:
+        super().__init__()
         self.save_hyperparameters()
 
-        self.tmodel = tmodel
-        self.name_dataset = name_dataset
-        self.epochs = epochs
-        self.shape = shape
-        self.learning_rate = learning_rate
-        self.scale_factor = 0.8
-        self.drop_path_rate = drop_path_rate
-        self.num_classes = num_classes
-        self.label_smoothing = label_smoothing
-        self.optimizer_momentum = optimizer_momentum
-        self.fn_loss = nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)
-        
-        # Métricas
-        self.train_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
-        self.train_f1 = F1Score(task="multiclass", num_classes=num_classes)
-        self.train_precision = Precision(task="multiclass", num_classes=num_classes)
-        self.train_recall = Recall(task="multiclass", num_classes=num_classes)
+        # Função de perda ---------------------------------------------------
+        self.fn_loss = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
-        self.val_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
-        self.val_f1 = F1Score(task="multiclass", num_classes=num_classes)
-        self.val_precision = Precision(task="multiclass", num_classes=num_classes)
-        self.val_recall = Recall(task="multiclass", num_classes=num_classes)
+        # Métricas ----------------------------------------------------------
+        self.train_accuracy = Accuracy(task="multiclass", num_classes=num_classes)
+        self.val_accuracy = Accuracy(task="multiclass", num_classes=num_classes)
+        self.test_accuracy = Accuracy(task="multiclass", num_classes=num_classes)
 
-        self.test_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
         self.test_f1 = F1Score(task="multiclass", num_classes=num_classes)
         self.test_precision = Precision(task="multiclass", num_classes=num_classes)
         self.test_recall = Recall(task="multiclass", num_classes=num_classes)
-
         self.test_confusion_matrix = MulticlassConfusionMatrix(num_classes=num_classes)
 
-        # 🔹 Inicializa listas para armazenar previsões e rótulos
-        self.test_preds = []
-        self.test_labels = []
+        # Backbone ----------------------------------------------------------
+        self._build_backbone(tmodel, drop_path_rate, num_classes)
+        self.model_dim: int  # definido no builder
 
-        # Escolha do modelo
+    # ---------------------------------------------------------------------
+    # Backbone builder (usa self.dl_model — mesmo nome do CustomEnsembleModel)
+    # ---------------------------------------------------------------------
+    def _build_backbone(self, tmodel: str, drop_path_rate: float, num_classes: int):
         if tmodel == "convnext_t":
-            self.model = models.convnext_tiny(weights=ConvNeXt_Tiny_Weights.DEFAULT, 
-                                            drop_path_rate=self.drop_path_rate)
-            self.sequential_layers = nn.Sequential(
-                nn.Flatten(start_dim=1),
-                nn.LayerNorm(768, eps=1e-6, elementwise_affine=True),
-                nn.Linear(in_features=768, out_features=self.num_classes, bias=True)
-            )
-            self.model.classifier = self.sequential_layers
-        
-        if tmodel == "convnext_s":
-            self.model = models.convnext_small(weights=ConvNeXt_Small_Weights.DEFAULT, 
-                                            drop_path_rate=self.drop_path_rate)
-            self.sequential_layers = nn.Sequential(
-                nn.Flatten(start_dim=1),
-                nn.LayerNorm(768, eps=1e-6, elementwise_affine=True),
-                nn.Linear(in_features=768, out_features=self.num_classes, bias=True)
-            )
-            self.model.classifier = self.sequential_layers
-
-        if tmodel == "convnext_b":
-            self.model = models.convnext_base(weights=ConvNeXt_Base_Weights.DEFAULT,
-                                              drop_path_rate = self.drop_path_rate)
-            self.sequential_layers = nn.Sequential(
-                nn.Flatten(start_dim=1),
-                nn.LayerNorm(1024, eps=1e-6, elementwise_affine=True),
-                nn.Linear(in_features=1024, out_features=self.num_classes, bias=True)
-            )
-            self.model.classifier = self.sequential_layers
-
-        if tmodel == "convnext_l":
-            self.model = models.convnext_large(weights=ConvNeXt_Large_Weights.DEFAULT, 
-                                    drop_path_rate=self.drop_path_rate)
-            self.sequential_layers = nn.Sequential(
-                nn.Flatten(start_dim=1),
-                nn.LayerNorm(1536, eps=1e-6, elementwise_affine=True),
-                nn.Linear(in_features=1536, out_features=self.num_classes, bias=True)
-            )
-            self.model.classifier = self.sequential_layers
-
-        if tmodel == "swint_t":
             self.model_dim = 768
-            self.model = swin_t(weights=Swin_T_Weights.DEFAULT)
-            self.sequential_layers = nn.Sequential(
-                nn.Flatten(start_dim=1),
-                nn.LayerNorm(self.model_dim, eps=1e-6, elementwise_affine=True),
-                nn.Linear(in_features=self.model_dim, out_features=self.num_classes, bias=True)
-                )
-            self.model.head = self.sequential_layers
-
-        if tmodel == "swint_s":
-            self.model = swin_s(weights=Swin_S_Weights.DEFAULT)
-            self.model.head = nn.Linear(in_features=768, out_features=self.num_classes, bias=True)
-
-        if tmodel == "swint_b":
-            self.model = swin_b(weights = Swin_B_Weights.DEFAULT)
-            self.model.head = nn.Linear(in_features=1024, out_features=self.num_classes, bias=True)
-        
-        if tmodel == "cct_224":
-            self.model = cct_14_7x2_224(pretrained=True, progress=True)
-            self.sequential_layers = nn.Sequential(
-                nn.Flatten(start_dim=1),
-                nn.LayerNorm(384, eps=1e-6, elementwise_affine=True),
-                nn.Linear(in_features=384, out_features=self.num_classes, bias=True)
+            self.dl_model = convnext_tiny(
+                weights=ConvNeXt_Tiny_Weights.DEFAULT,
+                drop_path_rate=drop_path_rate,
             )
-            self.model.classifier.fc = self.sequential_layers
+            # Substitui o classificador original pelo nosso cabeçote LN+Linear
+            self.dl_model.classifier = nn.Sequential(
+                nn.Flatten(1),
+                nn.LayerNorm(self.model_dim),
+                nn.Linear(self.model_dim, num_classes),
+            )
 
-        if tmodel == "cct_384":
-            self.model = cct_14_7x2_384(pretrained=True, progress=True)
-            self.sequential_layers = nn.Sequential(
-            nn.Flatten(start_dim=1),
-            nn.LayerNorm(384, eps=1e-6, elementwise_affine=True),
-            nn.Linear(in_features=384, out_features=self.num_classes, bias=True)
-        )
-            self.model.classifier.fc = self.sequential_layers
+        elif tmodel == "swint_t":
+            self.model_dim = 768
+            self.dl_model = swin_t(weights=Swin_T_Weights.DEFAULT)
+            # Swin já aplica Flatten na head -> substitui head inteiro
+            self.dl_model.head = nn.Sequential(
+                nn.Flatten(1),
+                nn.LayerNorm(self.model_dim),
+                nn.Linear(self.model_dim, num_classes),
+            )
+        else:
+            raise ValueError("tmodel deve ser 'convnext_t' ou 'swint_t'.")
 
-        if tmodel == "cct_384_fl":
-            self.model = cct_14_7x2_384_fl(pretrained=True, progress=True)
-            self.sequential_layers = nn.Sequential(
-            nn.Flatten(start_dim=1),
-            nn.LayerNorm(384, eps=1e-6, elementwise_affine=True),
-            nn.Linear(in_features=384, out_features=self.num_classes, bias=True)
-        )
-            self.model.classifier.fc = self.sequential_layers
-
-
+    # ------------------------------------------------------------------
+    # Forward & Step helpers
+    # ------------------------------------------------------------------
     def forward(self, x):
-        return self.model(x)
+        return self.dl_model(x)
 
-
-    def training_step(self, batch, batch_idx):
+    def _common_step(self, batch):
         images, labels = batch
         logits = self.forward(images)
         loss = self.fn_loss(logits, labels)
-        preds = torch.argmax(logits, 1)
+        preds = logits.argmax(1)
+        return loss, preds, labels
 
-        # Calcular a precisão
+    # ------------------------------------------------------------------
+    # Lightning hooks
+    # ------------------------------------------------------------------
+    def training_step(self, batch, batch_idx):
+        loss, preds, labels = self._common_step(batch)
         self.train_accuracy(preds, labels)
-        
-        # Logar a perda e a acurácia
-        self.log('train_loss', loss, prog_bar=True, on_step=False, on_epoch=True)
-        self.log('train_accuracy', self.train_accuracy, prog_bar=True, on_step=False, on_epoch=True)
-        
-        # Retornar a perda para o processamento posterior
-        return {'loss': loss}
-    
+        self.log_dict({"train_loss": loss, "train_accuracy": self.train_accuracy}, prog_bar=True)
+        return loss
 
     def validation_step(self, batch, batch_idx):
-        images, labels = batch
-        logits = self.forward(images)
-        loss = self.fn_loss(logits, labels)
-        preds = torch.argmax(logits, 1)
-        
-        # Calcular a precisão para validação
+        loss, preds, labels = self._common_step(batch)
         self.val_accuracy(preds, labels)
-        
-        # Logar a perda e a acurácia no conjunto de validação
-        self.log('val_loss', loss, prog_bar=True, on_epoch=True)
-        self.log('val_accuracy', self.val_accuracy, prog_bar=True, on_epoch=True)
-        
-        # Retornar a perda e a acurácia
-        return {'val_loss': loss}
-    
-    # def on_train_epoch_end(self):
-    #     # Acessar a perda média do treino automaticamente através do logger
-    #     avg_loss = self.trainer.callback_metrics['train_loss']
-
-    #     # Imprimir a perda média de treino
-    #     print(f'Loss médio do treino na época: {avg_loss:.4f}')
-    
-    # def on_validation_epoch_end(self):
-    #     # Acessar a perda média da validação automaticamente através do logger
-    #     avg_val_loss = self.trainer.callback_metrics['val_loss']
-
-    #     # Imprimir a perda média da validação
-    #     print(f'Loss médio da validação na época: {avg_val_loss:.4f}')
-
+        self.log_dict({"val_loss": loss, "val_accuracy": self.val_accuracy}, prog_bar=True)
+        return loss
 
     def test_step(self, batch, batch_idx):
-        images, labels = batch
-        logits = self.forward(images)
-        loss = self.fn_loss(logits, labels)
-        preds = torch.argmax(logits, 1)
-
-        # Atualiza as métricas corretamente
+        loss, preds, labels = self._common_step(batch)
         self.test_accuracy(preds, labels)
         self.test_f1(preds, labels)
         self.test_precision(preds, labels)
         self.test_recall(preds, labels)
         self.test_confusion_matrix(preds, labels)
+        self.log_dict(
+            {
+                "test_loss": loss,
+                "test_accuracy": self.test_accuracy,
+                "test_f1": self.test_f1,
+                "test_precision": self.test_precision,
+                "test_recall": self.test_recall,
+            },
+            prog_bar=True,
+        )
+        return loss
 
-        # Loga as métricas corretamente
-        self.log("test_loss", loss, prog_bar=True, on_epoch=True)
-        self.log("test_accuracy", self.test_accuracy.compute(), prog_bar=True)
-        self.log("test_f1", self.test_f1.compute(), prog_bar=True)
-        self.log("test_precision", self.test_precision.compute(), prog_bar=True)
-        self.log("test_recall", self.test_recall.compute(), prog_bar=True)
-        
-
-        return {
-            "test_loss": loss,
-            "test_accuracy": self.test_accuracy.compute(),
-            "test_f1": self.test_f1.compute(),
-            "test_precision": self.test_precision.compute(),
-            "test_recall": self.test_recall.compute()        
-            }
-    
     def on_test_epoch_end(self):
-        self.test_accuracy.reset()
-        self.test_f1.reset()
-        self.test_precision.reset()
-        self.test_recall.reset()
+        conf_mat = self.test_confusion_matrix.compute().cpu().numpy()
+        self.test_confusion_matrix.reset()
+        print("✅ Matriz de Confusão disponível em `self.on_test_epoch_end`.")
+        return conf_mat
 
-        # 🔹 Obter a matriz de confusão já acumulada pela métrica integrada
-        conf_matrix_value = self.test_confusion_matrix.compute().cpu().numpy()
-        self.test_confusion_matrix.reset()  # 🔹 Reseta a métrica para futuras execuções
-
-        print("✅ Matriz de Confusão calculada após o teste.")
-
-        return conf_matrix_value
-
-
+    # ------------------------------------------------------------------
+    # Optimizer / Scheduler
+    # ------------------------------------------------------------------
     def configure_optimizers(self):
-        # Definir o otimizador com os grupos de parâmetros
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate, betas = self.optimizer_momentum)
-
-        # Definir o scheduler
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.epochs)
-
-        # Retornar o otimizador e o scheduler
-        return {
-            'optimizer': optimizer,
-            'lr_scheduler': {
-                'scheduler': scheduler,
-                'interval': 'epoch',  # Step the scheduler per epoch
-                'monitor': 'val_loss',  # Optional, monitor val_loss (useful for other schedulers)
-                'frequency': 1,  # Apply the scheduler every epoch
-            }
-        }
-      
+        optimizer = torch.optim.AdamW(
+            self.parameters(),
+            lr=self.hparams.learning_rate,
+            betas=self.hparams.optimizer_momentum,
+            weight_decay=self.hparams.weight_decay,
+        )
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=self.hparams.epochs
+        )
+        return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
 class CustomEnsembleModel(pl.LightningModule):
     def __init__(self, tmodel, name_dataset, shape, epochs, learning_rate, features_dim,
