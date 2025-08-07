@@ -36,7 +36,7 @@ class CustomModel(pl.LightningModule):
         self.epochs = epochs
         self.shape = shape
         self.learning_rate = learning_rate
-        self.scale_factor = scale_factor
+        self.scale_factor = 0.8
         self.drop_path_rate = drop_path_rate
         self.num_classes = num_classes
         self.label_smoothing = label_smoothing
