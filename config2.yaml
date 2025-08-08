@@ -30,5 +30,5 @@ K_FOLDS: 5
 # Configurações de hardware e execução
 NUM_WORKERS: 4
 ACCELERATOR: "gpu"
-DEVICES: [0]
+DEVICES: [1]
 PRECISION: "16-mixed"
