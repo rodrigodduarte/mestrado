@@ -7,7 +7,7 @@ import yaml
 import random
 from pytorch_lightning.callbacks import TQDMProgressBar, ModelCheckpoint
 from model import CustomModel
-from kf_data import CustomImageCSVModule_kf
+from kf_data import CustomImageModule_kf
 from callbacks import (
     EarlyStoppingAtSpecificEpoch,
     SaveBestOrLastModelCallback,
@@ -51,16 +51,19 @@ def train_model():
         model = CustomModel(
             tmodel=hyperparams["TMODEL"],
             name_dataset=hyperparams["NAME_DATASET"],
+            shape=hyperparams["SHAPE"],
             epochs=hyperparams['MAX_EPOCHS'],
+            learning_rate=hyperparams['LEARNING_RATE'],
             shape=hyperparams["SHAPE"],
             learning_rate=hyperparams['LEARNING_RATE'],
-            scale_factor=hyperparams['SCALE_FACTOR'],
             drop_path_rate=hyperparams['DROP_PATH_RATE'],
             num_classes=hyperparams['NUM_CLASSES'],
             label_smoothing=hyperparams['LABEL_SMOOTHING'],
-            optimizer_momentum=(hyperparams['OPTIMIZER_MOMENTUM'], 0.999)
+            optimizer_momentum=(hyperparams['OPTIMIZER_MOMENTUM'], 0.999),
+            weight_decay=hyperparams['WEIGHT_DECAY'],
+            layer_scale=hyperparams['LAYER_SCALE']
         )
-        data_module = CustomImageCSVModule_kf(
+        data_module = CustomImageModule_kf(
             train_dir=hyperparams['TRAIN_DIR'],
             test_dir=hyperparams['TEST_DIR'],
             shape=hyperparams['SHAPE'],
