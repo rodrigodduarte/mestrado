@@ -54,8 +54,6 @@ def train_model():
             shape=hyperparams["SHAPE"],
             epochs=hyperparams['MAX_EPOCHS'],
             learning_rate=hyperparams['LEARNING_RATE'],
-            shape=hyperparams["SHAPE"],
-            learning_rate=hyperparams['LEARNING_RATE'],
             drop_path_rate=hyperparams['DROP_PATH_RATE'],
             num_classes=hyperparams['NUM_CLASSES'],
             label_smoothing=hyperparams['LABEL_SMOOTHING'],
