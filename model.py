@@ -27,7 +27,7 @@ class CustomModel(pl.LightningModule):
                  drop_path_rate, num_classes, label_smoothing, optimizer_momentum,
                  weight_decay, layer_scale):
         
-        super(CustomEnsembleModel, self).__init__()
+        super(CustomModel, self).__init__()
 
         self.save_hyperparameters(ignore=["method", "metric.goal", "metric.name","parameters.batch_size",
                                           "parameters.layer_scale", "parameters.learning_rate.distribution",
