@@ -119,9 +119,9 @@ def main():
         tot_loss, n = 0.0, 0
 
         with torch.no_grad():
-            for imgs, feats, y in test_loader:
-                imgs, feats, y = imgs.cuda(), feats.cuda(), y.cuda() if torch.cuda.is_available() else (imgs, feats, y)
-                out = model(imgs, feats)
+            for imgs, y in test_loader:
+                imgs, y = imgs.cuda().cuda(), y.cuda() if torch.cuda.is_available() else (imgs, y)
+                out = model(imgs)
                 tot_loss += criterion(out, y).item() * imgs.size(0)
                 n += imgs.size(0)
                 preds.extend(out.argmax(1).cpu().numpy())
