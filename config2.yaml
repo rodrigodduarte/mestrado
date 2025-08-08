@@ -1,7 +1,7 @@
 # Caminhos dos diretórios de treino e teste
 TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swedish/train"
 TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/swedish/test"
-PROJECT: "swedish_kf"
+PROJECT: "swedish_kf_ne"
 CHECKPOINT_PATH: "swedish_ensemble_kf_checkpoints_config_train"
 NAME_DATASET: "swedish"
 BEST_MODEL_PATH: /Documentos/projeto/swedish_bestmodel/visionary-sweep-2/best_model.ckpt
@@ -30,5 +30,5 @@ K_FOLDS: 5
 # Configurações de hardware e execução
 NUM_WORKERS: 4
 ACCELERATOR: "gpu"
-DEVICES: [1]
+DEVICES: [0]
 PRECISION: "16-mixed"
