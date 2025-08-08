@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy import stats
 
-from model import CustomModel
+from model import CustomEnsembleModel
 from kf_data import CustomImageCSVModule_kf
 
 # -------------------------------------------------------------------- #
@@ -99,17 +99,17 @@ def main():
             continue
 
         print(f"[Fold {fold}] Avaliando {ckpt}")
-        model = CustomModel.load_from_checkpoint(str(ckpt), scale_factor=1.0)
+        model = CustomEnsembleModel.load_from_checkpoint(str(ckpt))
         model.eval().to("cuda" if torch.cuda.is_available() else "cpu")
 
-        dm = CustomImageCSVModule_kf(
-            train_dir=cfg["TRAIN_DIR"],
-            test_dir=cfg["TEST_DIR"],
-            shape=cfg["SHAPE"],
-            batch_size=cfg["BATCH_SIZE"],
-            num_workers=cfg["NUM_WORKERS"],
-            n_splits=cfg["K_FOLDS"],
-            fold_idx=fold,
+        dm = CustomImageModule_kf(
+            train_dir=cfg['TRAIN_DIR'],
+            test_dir=cfg['TEST_DIR'],
+            shape=cfg['SHAPE'],
+            batch_size=cfg['BATCH_SIZE'],
+            num_workers=cfg['NUM_WORKERS'],
+            n_splits=cfg['K_FOLDS'],
+            fold_idx=fold
         )
         dm.setup("test")
         test_loader = dm.test_dataloader()
