@@ -70,29 +70,35 @@ class CustomModel(pl.LightningModule):
     def _build_backbone(self, tmodel: str, drop_path_rate: float, num_classes: int):
         if tmodel == "convnext_t":
             self.model_dim = 768
-            self.dl_model = convnext_tiny(
-                weights=ConvNeXt_Tiny_Weights.DEFAULT,
-                drop_path_rate=drop_path_rate,
+            self.dl_model = models.convnext_tiny(weights=ConvNeXt_Tiny_Weights.DEFAULT, 
+                                            drop_path_rate=self.drop_path_rate)
+            self.sequential_layers = nn.Sequential(
+                nn.Flatten(start_dim=1),
+                nn.LayerNorm(self.model_dim, eps=1e-6, elementwise_affine=True),
             )
-            # Substitui o classificador original pelo nosso cabeçote LN+Linear
-            self.dl_model.classifier = nn.Sequential(
-                nn.Flatten(1),
-                nn.LayerNorm(self.model_dim),
-                nn.Linear(self.model_dim, num_classes),
-            )
+            self.dl_model.classifier = self.sequential_layers
 
-        elif tmodel == "swint_t":
+        if tmodel == "swint_t":
             self.model_dim = 768
             self.dl_model = swin_t(weights=Swin_T_Weights.DEFAULT)
-            # Swin já aplica Flatten na head -> substitui head inteiro
-            self.dl_model.head = nn.Sequential(
-                nn.Flatten(1),
-                nn.LayerNorm(self.model_dim),
-                nn.Linear(self.model_dim, num_classes),
-            )
-        else:
-            raise ValueError("tmodel deve ser 'convnext_t' ou 'swint_t'.")
+            self.sequential_layers = nn.Sequential(
+                nn.Flatten(start_dim=1),
+                nn.LayerNorm(self.model_dim, eps=1e-6, elementwise_affine=True),
+                )
+            self.dl_model.head = self.sequential_layers
 
+        # Modelo ajustado
+        adjusted_dim = self.model_dim
+        scaled_dim = int(adjusted_dim * self.layer_scale)
+
+        self.ensemble_model = nn.Sequential(
+            nn.Linear(adjusted_dim, scaled_dim),
+            nn.GELU(approximate='none'),
+            nn.LayerNorm(scaled_dim),
+            nn.Dropout(p=0.3),
+            nn.Linear(scaled_dim, self.num_classes)
+        )
+        
     # ------------------------------------------------------------------
     # Forward & Step helpers
     # ------------------------------------------------------------------

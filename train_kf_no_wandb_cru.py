@@ -6,19 +6,21 @@ import numpy as np
 import yaml
 import random
 from pytorch_lightning.callbacks import TQDMProgressBar, ModelCheckpoint
-from model import CustomEnsembleModel, CustomModel
-from kf_data import CustomImageCSVModule_kf, CustomImageModule_kf
+from model import CustomModel
+from kf_data import CustomImageCSVModule_kf
 from callbacks import (
     EarlyStoppingAtSpecificEpoch,
     SaveBestOrLastModelCallback,
     EarlyStopCallback
 )
 
+# Carregar hiperparâmetros do arquivo config.yaml
 def load_hyperparameters(file_path):
     with open(file_path, 'r') as file:
         hyperparams = yaml.safe_load(file)
     return hyperparams
 
+# Configurar sementes para garantir reprodutibilidade
 def set_random_seeds():
     torch.backends.cudnn.deterministic = True
     random.seed(42)
@@ -26,6 +28,7 @@ def set_random_seeds():
     torch.manual_seed(42)
     torch.cuda.manual_seed_all(42)
 
+# Função principal para treinamento com validação cruzada
 def train_model():
     hyperparams = load_hyperparameters('config.yaml')
     k_splits = hyperparams['K_FOLDS']
@@ -34,18 +37,15 @@ def train_model():
     run_dir = os.path.join("modelos_kf", f"{hyperparams['NAME_DATASET']}_{hyperparams['TMODEL']}_ne")
     os.makedirs(run_dir, exist_ok=True)
 
-    final_model_dir = os.path.join(run_dir, "final_best_models")
-    os.makedirs(final_model_dir, exist_ok=True)
-
-    for fold in range(1):
+    for fold in range(k_splits):
         print(f"\n==================== Fold {fold+1}/{k_splits} ====================")
 
         fold_callback = ModelCheckpoint(
             dirpath=run_dir,
-            filename=f"fold_{fold}_best_model_{{val_loss:.4f}}",
+            filename=f"fold_{fold}_best_model",
             monitor="val_loss",
             mode="min",
-            save_top_k=3
+            save_top_k=1
         )
 
         model = CustomModel(
@@ -54,13 +54,13 @@ def train_model():
             epochs=hyperparams['MAX_EPOCHS'],
             shape=hyperparams["SHAPE"],
             learning_rate=hyperparams['LEARNING_RATE'],
+            scale_factor=hyperparams['SCALE_FACTOR'],
             drop_path_rate=hyperparams['DROP_PATH_RATE'],
             num_classes=hyperparams['NUM_CLASSES'],
             label_smoothing=hyperparams['LABEL_SMOOTHING'],
             optimizer_momentum=(hyperparams['OPTIMIZER_MOMENTUM'], 0.999)
         )
-
-        data_module = CustomImageModule_kf(
+        data_module = CustomImageCSVModule_kf(
             train_dir=hyperparams['TRAIN_DIR'],
             test_dir=hyperparams['TEST_DIR'],
             shape=hyperparams['SHAPE'],
@@ -87,32 +87,30 @@ def train_model():
 
         trainer.fit(model, data_module)
 
-        # Avaliar os top 3 modelos salvos
-        checkpoint_files = sorted([
-            os.path.join(run_dir, fname)
-            for fname in os.listdir(run_dir)
-            if fname.startswith(f"fold_{fold}_best_model_") and fname.endswith(".ckpt")
-        ])
+        best_model_path = fold_callback.best_model_path
 
-        best_accuracy = -1.0
-        best_model_path = None
+        # Novo trecho: carregar epoch do melhor modelo
+        checkpoint_data = torch.load(best_model_path, map_location='cpu')
+        best_epoch = checkpoint_data['epoch']
+        print(f"Melhor modelo para fold {fold} salvo na época {best_epoch}")
 
-        for ckpt_path in checkpoint_files:
-            model = CustomModel.load_from_checkpoint(ckpt_path)
-            test_metrics = trainer.test(model, data_module, verbose=False)[0]
-            test_accuracy = test_metrics.get("test_accuracy", 0)
+        model = CustomModel.load_from_checkpoint(best_model_path)
+        val_metrics = trainer.validate(model, data_module)[0]
+        test_metrics = trainer.test(model, data_module)[0]
 
-            if "test_accuracy" not in metrics_history:
-                metrics_history["test_accuracy"] = []
-            metrics_history["test_accuracy"].append(test_accuracy)
+        for metric_name, metric_value in val_metrics.items():
+            if metric_name not in metrics_history:
+                metrics_history[metric_name] = []
+            metrics_history[metric_name].append(metric_value)
 
-            if test_accuracy > best_accuracy:
-                best_accuracy = test_accuracy
-                best_model_path = ckpt_path
+        for metric_name, metric_value in test_metrics.items():
+            if metric_name not in metrics_history:
+                metrics_history[metric_name] = []
+            metrics_history[metric_name].append(metric_value)
 
-        if best_model_path:
-            shutil.copy(best_model_path, os.path.join(final_model_dir, f"fold_{fold}_best_model.ckpt"))
-            print(f"Melhor modelo do Fold {fold} salvo: {best_model_path} com test_accuracy={best_accuracy:.4f}")
+        # Limpar modelo da GPU ao final do fold
+        del model
+        torch.cuda.empty_cache()
 
     print("\n==================== Métricas Finais ====================")
     for metric_name, values in metrics_history.items():

@@ -23,6 +23,7 @@ from callbacks import (
 # Utilidades auxiliares
 # -----------------------------------------------------------------------------
 
+ 
 def load_hyperparameters(file_path: str) -> Dict[str, Any]:
     """Carrega parâmetros do YAML."""
     with open(file_path, "r") as file:
