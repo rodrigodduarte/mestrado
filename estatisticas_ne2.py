@@ -2,7 +2,7 @@
 """
 estatisticas.py
 Avalia os checkpoints de cada fold, calcula métricas, intervalos de confiança
-(95 % t-Student) e estatísticas-t contra um baseline configurável.
+(95 % t-Student) e estatísticas-t contra um baseli{cfg['TMODEL']}_ne configurável.
 Salva tudo em <dataset>_<modelo>_resultados.txt dentro da pasta modelos_kf/.
 """
 
@@ -21,7 +21,7 @@ import seaborn as sns
 from scipy import stats
 
 from model import CustomModel
-from kf_data import CustomImageCSVModule_kf
+from kf_data import CustomImageModule_kf
 
 # -------------------------------------------------------------------- #
 # Configurações do teste t
@@ -79,13 +79,13 @@ def t_test(mean, std, k, mu0):
 
 
 # -------------------------------------------------------------------- #
-# Pipeline
+# Pipeli{cfg['TMODEL']}_ne
 # -------------------------------------------------------------------- #
 def main():
     set_seeds()
     cfg = load_cfg()
 
-    base = Path("modelos_kf") / f"{cfg['NAME_DATASET']}_{cfg['TMODEL']}"
+    base = Path("modelos_kf") / f"{cfg['NAME_DATASET']}_{cfg['TMODEL']}_ne"
     base.mkdir(parents=True, exist_ok=True)
 
     # coletores por fold
@@ -102,14 +102,14 @@ def main():
         model = CustomModel.load_from_checkpoint(str(ckpt))
         model.eval().to("cuda" if torch.cuda.is_available() else "cpu")
 
-        dm = CustomImageCSVModule_kf(
-            train_dir=cfg["TRAIN_DIR"],
-            test_dir=cfg["TEST_DIR"],
-            shape=cfg["SHAPE"],
-            batch_size=cfg["BATCH_SIZE"],
-            num_workers=cfg["NUM_WORKERS"],
-            n_splits=cfg["K_FOLDS"],
-            fold_idx=fold,
+        dm = CustomImageModule_kf(
+            train_dir=cfg['TRAIN_DIR'],
+            test_dir=cfg['TEST_DIR'],
+            shape=cfg['SHAPE'],
+            batch_size=cfg['BATCH_SIZE'],
+            num_workers=cfg['NUM_WORKERS'],
+            n_splits=cfg['K_FOLDS'],
+            fold_idx=fold
         )
         dm.setup("test")
         test_loader = dm.test_dataloader()
@@ -179,7 +179,7 @@ def main():
     # ------------------------------------------------------------------ #
     # Salva em .txt
     # ------------------------------------------------------------------ #
-    txt = base / f"{cfg['NAME_DATASET']}_{cfg['TMODEL']}_resultados.txt"
+    txt = base / f"{cfg['NAME_DATASET']}_{cfg['TMODEL']}_ne_resultados.txt"
     with open(txt, "w") as f:
         f.write(f"Arquivo gerado em: {datetime.now():%d/%m/%Y – %H:%M:%S}\n\n")
         for fold, m in fold_metrics.items():
