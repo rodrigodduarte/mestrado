@@ -42,7 +42,6 @@ class CustomModel(pl.LightningModule):
         label_smoothing: float,
         optimizer_momentum: tuple,
         weight_decay: float = 0.0,
-        scale_factor: float = 1.0,  # mantido apenas p/ compatibilidade de checkpoints
     ) -> None:
         super().__init__()
         self.save_hyperparameters()
