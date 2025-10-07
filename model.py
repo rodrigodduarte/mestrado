@@ -625,7 +625,6 @@ class CustomFeaturesOnlyModel(pl.LightningModule):
     """
 
     def __init__(self,
-                 tmodel: str,
                  name_dataset: str,
                  shape: tuple,
                  epochs: int,
