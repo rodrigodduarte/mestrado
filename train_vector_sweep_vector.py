@@ -214,7 +214,7 @@ if __name__ == "__main__":
                 "values": [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
             },
             "batch_size": {
-                "values": [64, 128, 256]
+                "values": [64]
             },
             "drop_path_rate": {
                 "value": 0.0
