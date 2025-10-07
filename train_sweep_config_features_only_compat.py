@@ -12,8 +12,8 @@ from pytorch_lightning.callbacks import TQDMProgressBar
 from pytorch_lightning.loggers import WandbLogger
 import wandb
 
-from CustomFeaturesOnlyModel import CustomFeaturesOnlyModel
-from features_datamodule import CustomFeaturesCSVModule, CustomFeaturesCSVModule_kf
+from model import CustomFeaturesOnlyModel
+from dataset import CustomFeaturesCSVModule, CustomFeaturesCSVModule_kf
 from callbacks import EarlyStoppingAtSpecificEpoch, SaveBestOrLastModelCallback, EarlyStopCallback
 
 # ================================
