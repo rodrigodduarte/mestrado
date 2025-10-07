@@ -572,12 +572,6 @@ class FeaturesOnlyFromFoldersDataset(Dataset):
 
         return features, label
     
-import os
-import torch
-from torch.utils.data import DataLoader, random_split
-import pytorch_lightning as pl
-from features_only_from_folders import FeaturesOnlyFromFoldersDataset  # ajuste o nome do arquivo se necessário
-
 
 class CustomFeaturesFromFoldersModule(pl.LightningDataModule):
     """
