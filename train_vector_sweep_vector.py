@@ -39,7 +39,7 @@ from pytorch_lightning.loggers import WandbLogger
 import wandb
 
 # Projeto
-from model import CustomVectorModel
+from model import ReLuMLP2L
 from dataset import CustomImageCSVModule
 from callbacks import (
     EarlyStoppingAtSpecificEpoch,
@@ -94,7 +94,7 @@ def train_model(config=None):
         )
 
         # Modelo: MLP apenas para vetor de características
-        model = CustomVectorModel(
+        model = ReLuMLP2L(
             tmodel=hp.get("TMODEL", "vector"),  # compatibilidade com assinatura
             name_dataset=hp["NAME_DATASET"],
             shape=hp["SHAPE"],  # pode ser ignorado internamente pelo MLP
