@@ -176,7 +176,7 @@ if __name__ == "__main__":
             'weight_decay':       {'min': 1e-7, 'max': 1e-6, 'distribution': 'uniform'},
             'optimizer_momentum': {'min': 0.92, 'max': 0.99, 'distribution': 'uniform'},
             'mlp_vector_model_scale': {'min': 0.8, 'max': 1.3, 'distribution': 'uniform'},  # ignorado aqui
-            'layer_scale':        {'min': 0.5, 'max': 1.5, 'distribution': 'uniform'},
+            'layer_scale':        {'min': 0.5, 'max': 5, 'distribution': 'uniform'},
             'drop_path_rate':     {'min': 0.0, 'max': 0.5, 'distribution': 'uniform'},      # aceito/ignorado
             'label_smoothing':    {'min': 0.0, 'max': 0.2, 'distribution': 'uniform'}
         }
