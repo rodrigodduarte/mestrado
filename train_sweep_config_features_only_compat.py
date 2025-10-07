@@ -13,7 +13,7 @@ from pytorch_lightning.loggers import WandbLogger
 import wandb
 
 from model import CustomFeaturesOnlyModel
-from dataset import CustomFeaturesCSVModule, CustomFeaturesCSVModule_kf
+from features_datamodule import CustomFeaturesCSVModule, CustomFeaturesCSVModule_kf
 from callbacks import EarlyStoppingAtSpecificEpoch, SaveBestOrLastModelCallback, EarlyStopCallback
 
 # ================================
