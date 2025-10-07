@@ -1,70 +1,38 @@
-#!/usr/bin/env python3
-"""
-train_vector_sweep_config.py
-─────────────────────────────
-Sweep no Weights & Biases para **modelo baseado apenas no vetor de características**
-(MLP), padronizado a partir do `train_sweep_config.py` fornecido.
-
-• Usa `CustomImageCSVModule` (não K-Fold), igual ao script-base.
-• Substitui `CustomEnsembleModel` por `CustomVectorModel`.
-• Mantém callbacks, logger, e política de salvar/carregar melhor checkpoint pelo nome do run.
-• Após o teste, limpa a pasta de checkpoints e esvazia a lixeira (Linux), como no script-base.
-
-Execução:
-    conda activate mestrado
-    python train_vector_sweep_config.py
-
-Pré-requisitos:
-  - config.yaml com chaves: PROJECT, TRAIN_DIR, TEST_DIR, SHAPE, BATCH_SIZE,
-    NUM_WORKERS, ACCELERATOR, DEVICES, PRECISION, MAX_EPOCHS, NAME_DATASET,
-    FEATURES_DIM, NUM_CLASSES, SCALE_FACTOR, CHECKPOINT_PATH
-  - model.CustomVectorModel
-  - dataset.CustomImageCSVModule
-  - callbacks.{EarlyStoppingAtSpecificEpoch, SaveBestOrLastModelCallback, EarlyStopCallback}
-"""
-
 import os
-import platform
-import subprocess
-import shutil
-import random
-import yaml
-import numpy as np
 import torch
 import pytorch_lightning as pl
+import numpy as np
 
 from pytorch_lightning.callbacks import TQDMProgressBar
-from pytorch_lightning.loggers import WandbLogger
 
+# ==== ALTERAÇÕES PRINCIPAIS ====
+# 1) Modelo passa a ser o de FEATURES-ONLY
+from model import CustomFeaturesOnlyModel
+# 2) DataModule passa a ler SOMENTE VETORES via pastas por classe
+#    (mesma assinatura do CustomImageCSVModule, ignorando 'shape')
+from dataset import CustomFeaturesFromFoldersModule
+
+from callbacks import EarlyStoppingAtSpecificEpoch, SaveBestOrLastModelCallback, EarlyStopCallback
+
+import yaml
 import wandb
-
-# Projeto
-from model import ReLuMLP2L
-from dataset import CustomImageCSVModule
-from callbacks import (
-    EarlyStoppingAtSpecificEpoch,
-    SaveBestOrLastModelCallback,
-    EarlyStopCallback,
-)
+from pytorch_lightning.loggers import WandbLogger
+import random
+import subprocess
+import shutil
 
 
 def empty_trash():
-    """Esvazia a lixeira no Linux (mesmo comportamento do script-base)."""
-    if platform.system() == "Linux":
-        trash_path = os.path.expanduser("~/.local/share/Trash")
-        if os.path.exists(trash_path):
-            subprocess.run([
-                "rm",
-                "-rf",
-                f"{trash_path}/files/*",
-                f"{trash_path}/info/*",
-            ])
-            print("Lixeira esvaziada com sucesso no Linux.")
+    trash_path = os.path.expanduser("~/.local/share/Trash")
+    if os.path.exists(trash_path):
+        subprocess.run(["rm", "-rf", f"{trash_path}/files/*", f"{trash_path}/info/*"]) \
+            and print("Lixeira esvaziada com sucesso no Linux.")
 
 
-def load_hyperparameters(file_path: str = "config.yaml"):
-    with open(file_path, "r") as f:
-        return yaml.safe_load(f)
+def load_hyperparameters(file_path):
+    with open(file_path, 'r') as file:
+        hyperparams = yaml.safe_load(file)
+    return hyperparams
 
 
 def set_random_seeds(seed: int = 42):
@@ -75,154 +43,150 @@ def set_random_seeds(seed: int = 42):
     torch.cuda.manual_seed_all(seed)
 
 
+# ================================
+# Treino (PIPELINE DO SWEEP) — FEATURES ONLY, SEM K-FOLD
+# ================================
+
 def train_model(config=None):
-    hp = load_hyperparameters("config.yaml")
+    hyperparams = load_hyperparameters('config.yaml')
 
-    # Inicializa W&B e captura parâmetros do sweep
-    with wandb.init(project=hp["PROJECT"], config=config):
-        cfg = wandb.config
+    with wandb.init(project=hyperparams["PROJECT"], config=config):
+        config_sweep = wandb.config
 
-        # DataModule (igual ao script-base: sem K-Fold)
-        dm = CustomImageCSVModule(
-            train_dir=hp["TRAIN_DIR"],
-            test_dir=hp["TEST_DIR"],
-            shape=hp["SHAPE"],
-            batch_size=hp["BATCH_SIZE"],
-            num_workers=hp["NUM_WORKERS"],
-            # Caso seu datamodule permita, você pode sinalizar para usar somente vetores:
-            # use_vectors_only=True,
+        # ----------------------------
+        # DataModule (features em PASTAS por classe)
+        # Mantém a mesma assinatura do CustomImageCSVModule: 'shape' é aceito e ignorado
+        # Split de validação interno (val_split) fixo em 0.2 por padrão
+        # ----------------------------
+        data_module = CustomFeaturesFromFoldersModule(
+            train_dir=hyperparams['TRAIN_DIR'],
+            test_dir=hyperparams['TEST_DIR'],
+            batch_size=hyperparams['BATCH_SIZE'],
+            num_workers=hyperparams['NUM_WORKERS'],
+            val_split=float(hyperparams.get('VAL_SPLIT', 0.2)),
+            seed=int(hyperparams.get('SEED', 42)),
         )
 
-        # Modelo: MLP apenas para vetor de características
-        model = ReLuMLP2L(
-            tmodel=hp.get("TMODEL", "vector"),  # compatibilidade com assinatura
-            name_dataset=hp["NAME_DATASET"],
-            shape=hp["SHAPE"],  # pode ser ignorado internamente pelo MLP
-            epochs=hp["MAX_EPOCHS"],
-            learning_rate=float(cfg.learning_rate),
-            features_dim=hp["FEATURES_DIM"],
-            scale_factor=hp.get("SCALE_FACTOR", 1.0),
-            drop_path_rate=float(cfg.drop_path_rate),  # mantido por padronização (pode ser ignorado)
-            num_classes=hp["NUM_CLASSES"],
-            label_smoothing=float(cfg.label_smoothing),
-            optimizer_momentum=(float(cfg.optimizer_momentum), 0.999),  # AdamW betas
-            weight_decay=float(cfg.weight_decay),
-            layer_scale=float(cfg.layer_scale),
-            mlp_vector_model_scale=float(cfg.mlp_vector_model_scale),
+        # ----------------------------
+        # Modelo (features only)
+        # Mantém nomes/assinatura compatíveis com seu YAML / molde original
+        # ----------------------------
+        model = CustomFeaturesOnlyModel(
+            tmodel=hyperparams.get("TMODEL", "vector_only"),
+            name_dataset=hyperparams.get("NAME_DATASET", "features"),
+            shape=hyperparams.get("SHAPE", (0, 0)),              # aceito/ignorado
+            epochs=int(hyperparams['MAX_EPOCHS']),
+            learning_rate=float(config_sweep.learning_rate),
+            features_dim=int(hyperparams['FEATURES_DIM']),
+            drop_path_rate=float(config_sweep.get('drop_path_rate', 0.0)),  # aceito/ignorado
+            num_classes=int(hyperparams['NUM_CLASSES']),
+            label_smoothing=float(config_sweep.label_smoothing),
+            optimizer_momentum=(float(config_sweep.optimizer_momentum), 0.999),
+            weight_decay=float(config_sweep.weight_decay),
+            layer_scale=float(config_sweep.layer_scale),
         )
 
-        # Logger
-        wandb_logger = WandbLogger(project=hp["PROJECT"])
-
-        # Salvar melhor modelo com nome do run (mesmo padrão do base)
+        # ----------------------------
+        # Logger e callbacks
+        # ----------------------------
+        wandb_logger = WandbLogger(project=hyperparams["PROJECT"]) 
         run_name = wandb.run.name
-        ckpt_path = f"{hp['CHECKPOINT_PATH']}/{run_name}.ckpt"
-        save_model_cb = SaveBestOrLastModelCallback(ckpt_path)
+        checkpoint_path = f"{hyperparams['CHECKPOINT_PATH']}/{run_name}.ckpt"
+        os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
+        save_model_callback = SaveBestOrLastModelCallback(checkpoint_path)
 
-        # Callbacks de parada/monitoramento (iguais ao base)
-        epoch_cb = EarlyStoppingAtSpecificEpoch(
+        epoch_callback = EarlyStoppingAtSpecificEpoch(
             patience=2,
             threshold=1e-3,
             monitor="val_loss",
             mode="min",
-            verbose=True,
-        )
-        early_stop_cb = EarlyStopCallback(
-            metric_name="val_loss",
-            threshold=0.5,
-            target_epoch=3,
+            verbose=True
         )
 
+        early_stop_callback = EarlyStopCallback(
+            metric_name="val_loss",
+            threshold=0.5,
+            target_epoch=3
+        )
+
+        # ----------------------------
+        # Trainer
+        # ----------------------------
         trainer = pl.Trainer(
             logger=wandb_logger,
             log_every_n_steps=10,
-            accelerator=hp["ACCELERATOR"],
-            devices=hp["DEVICES"],
-            precision=hp["PRECISION"],
-            max_epochs=hp["MAX_EPOCHS"],
-            callbacks=[TQDMProgressBar(leave=True), save_model_cb, epoch_cb, early_stop_cb],
+            accelerator=hyperparams['ACCELERATOR'],
+            devices=hyperparams['DEVICES'],
+            precision=hyperparams['PRECISION'],
+            max_epochs=int(hyperparams['MAX_EPOCHS']),
+            callbacks=[
+                TQDMProgressBar(leave=True),
+                save_model_callback,
+                epoch_callback,
+                early_stop_callback
+            ]
         )
 
-        # Treinamento
-        trainer.fit(model, dm)
+        # ----------------------------
+        # Fit + Test
+        # ----------------------------
+        trainer.fit(model, data_module)
 
-        # Carrega melhor checkpoint
-        best_model = CustomVectorModel.load_from_checkpoint(ckpt_path)
+        # Carrega melhor checkpoint salvo
+        model = CustomFeaturesOnlyModel.load_from_checkpoint(checkpoint_path)
+        trainer.test(model, data_module)
 
-        # Teste
-        trainer.test(best_model, dm)
-
-        # Limpeza: apagar checkpoints
-        ckpt_dir = os.path.dirname(ckpt_path)
-        if os.path.exists(ckpt_dir):
-            for fname in os.listdir(ckpt_dir):
-                fpath = os.path.join(ckpt_dir, fname)
-                if os.path.isfile(fpath):
-                    os.remove(fpath)
-            print(f"Todos os arquivos foram removidos da pasta {ckpt_dir}.")
+        # ----------------------------
+        # Limpeza (mesmo molde)
+        # ----------------------------
+        checkpoint_dir = os.path.dirname(checkpoint_path)
+        if os.path.exists(checkpoint_dir):
+            for file_name in os.listdir(checkpoint_dir):
+                file_path = os.path.join(checkpoint_dir, file_name)
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+            print(f"Todos os arquivos foram removidos da pasta {checkpoint_dir}.")
 
         empty_trash()
 
-        # Opcional: remover pasta do projeto local do W&B (mesmo do base)
-        project_dir = os.path.expanduser(hp["PROJECT"])
+        # Atenção: no molde original havia remoção de uma pasta com o nome do PROJECT.
+        project_dir = os.path.expanduser(hyperparams["PROJECT"])  # mantenho o comportamento original
         if os.path.exists(project_dir):
             shutil.rmtree(project_dir)
             print(f"A pasta {project_dir} foi excluída com sucesso.")
         else:
-            print(f"A pasta {project_dir} não existe e não foi excluída.")
+            print(f"A pasta {project_dir} não existe e não foi excluída.")  
 
         wandb.finish()
 
 
 if __name__ == "__main__":
+    # Login no W&B
     wandb.login()
-    hp = load_hyperparameters("config.yaml")
-    set_random_seeds(42)
+    hyperparams = load_hyperparameters('config.yaml')
 
-    # Sweep: replicando o range do script-base
+    # Seeds
+    set_random_seeds(int(hyperparams.get('SEED', 42)))
+
+    # Sweep config — mantém faixas do seu molde
     sweep_config = {
-        "method": "bayes",
-        "metric": {"name": "val_loss", "goal": "minimize"},
-        "early_terminate": {"type": "hyperband", "min_iter": 6, "eta": 3},
-        "parameters": {
-            "learning_rate": {
-                "distribution": "log_uniform_values",
-                "min": 3e-5,
-                "max": 3e-3
-            },
-            "weight_decay": {
-                "distribution": "log_uniform_values",
-                "min": 1e-6,
-                "max": 1e-2
-            },
-            "optimizer_momentum": {
-                "distribution": "uniform",
-                "min": 0.85,
-                "max": 0.99
-            },
-            "label_smoothing": {
-                "distribution": "uniform",
-                "min": 0.0,
-                "max": 0.2
-            },
-            "layer_scale": {
-                "distribution": "uniform",
-                "min": 0.5,
-                "max": 2.0
-            },
-            "mlp_vector_model_scale": {
-                "values": [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
-            },
-            "batch_size": {
-                "values": [64]
-            },
-            "drop_path_rate": {
-                "value": 0.0
-            }
+        'method': 'random',
+        'metric': {'name': 'val_loss', 'goal': 'minimize'},
+        'parameters': {
+            'learning_rate':      {'min': 1e-5, 'max': 2e-4, 'distribution': 'uniform'},
+            'weight_decay':       {'min': 1e-7, 'max': 1e-6, 'distribution': 'uniform'},
+            'optimizer_momentum': {'min': 0.92, 'max': 0.99, 'distribution': 'uniform'},
+            'mlp_vector_model_scale': {'min': 0.8, 'max': 1.3, 'distribution': 'uniform'},  # ignorado aqui
+            'layer_scale':        {'min': 0.5, 'max': 1.5, 'distribution': 'uniform'},
+            'drop_path_rate':     {'min': 0.0, 'max': 0.5, 'distribution': 'uniform'},      # aceito/ignorado
+            'label_smoothing':    {'min': 0.0, 'max': 0.2, 'distribution': 'uniform'}
         }
     }
 
-    sweep_id = wandb.sweep(sweep_config, project=hp["PROJECT"])
-    # Ajuste "count" conforme desejar (200 no script-base)
-    wandb.agent(sweep_id, function=train_model, count=200)
+    # Criar o sweep
+    sweep_id = wandb.sweep(sweep_config, project=hyperparams["PROJECT"])
+
+    # Executar o sweep (sem K-Fold)
+    wandb.agent(sweep_id, function=train_model, count=hyperparams.get('SWEEP_COUNT', 200))
+
     wandb.finish()
