@@ -605,3 +605,184 @@ class ReLuMLP2L(pl.LightningModule):
         sch = torch.optim.lr_scheduler.CosineAnnealingLR(
             opt, T_max=self.trainer.max_epochs)
         return {"optimizer": opt, "lr_scheduler": sch}
+
+import torch
+from torch import nn
+import torch.nn.functional as F
+import pytorch_lightning as pl
+from torchmetrics import Accuracy, F1Score, Precision, Recall
+from torchmetrics.classification import MulticlassConfusionMatrix
+
+
+class CustomFeaturesOnlyModel(pl.LightningModule):
+    """
+    Modelo para treinamento ISOLADO do vetor de características.
+    
+    Assinatura compatível com o CustomEnsembleModel para facilitar o uso com o
+    mesmo arquivo de configuração/YAML. Parâmetros não utilizados (tmodel,
+    shape, drop_path_rate) são aceitos e ignorados.
+
+    Espera que o DataLoader retorne:
+      - (features, labels)  OU  (images, features, labels)
+        (no segundo caso as imagens são ignoradas)
+    
+    features: tensor [B, features_dim]
+    labels:   tensor [B]
+    """
+    def __init__(self,
+                 tmodel: str,
+                 name_dataset: str,
+                 shape: tuple,
+                 epochs: int,
+                 learning_rate: float,
+                 features_dim: int,
+                 drop_path_rate: float,
+                 num_classes: int,
+                 label_smoothing: float,
+                 optimizer_momentum: tuple,
+                 weight_decay: float,
+                 layer_scale: float):
+        super().__init__()
+
+        # Guardar hparams (mantendo compatibilidade com o padrão do projeto)
+        self.save_hyperparameters(ignore=[
+            "metric.goal", "metric.name", "parameters.batch_size",
+            "parameters.layer_scale", "parameters.learning_rate.distribution",
+            "parameters.learning_rate.max", "parameters.learning_rate.min"
+        ])
+
+        self.num_classes = num_classes
+        self.features_dim = features_dim
+        self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
+        self.optimizer_momentum = optimizer_momentum
+        self.epochs = epochs
+
+        # === Métricas ===
+        self.train_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
+        self.val_accuracy   = Accuracy(task='multiclass', num_classes=num_classes)
+        self.test_accuracy  = Accuracy(task='multiclass', num_classes=num_classes)
+
+        self.train_f1 = F1Score(task="multiclass", num_classes=num_classes)
+        self.val_f1   = F1Score(task="multiclass", num_classes=num_classes)
+        self.test_f1  = F1Score(task="multiclass", num_classes=num_classes)
+
+        self.train_precision = Precision(task="multiclass", num_classes=num_classes)
+        self.val_precision   = Precision(task="multiclass", num_classes=num_classes)
+        self.test_precision  = Precision(task="multiclass", num_classes=num_classes)
+
+        self.train_recall = Recall(task="multiclass", num_classes=num_classes)
+        self.val_recall   = Recall(task="multiclass", num_classes=num_classes)
+        self.test_recall  = Recall(task="multiclass", num_classes=num_classes)
+
+        self.test_confusion_matrix = MulticlassConfusionMatrix(num_classes=num_classes)
+
+        # === Cabeça MLP somente para features ===
+        adjusted_dim = self.features_dim
+        scaled_dim   = int(adjusted_dim * layer_scale)
+        scaled_dim   = max(scaled_dim, max(64, num_classes))  # garantir dimensão mínima razoável
+
+        self.net = nn.Sequential(
+            nn.LayerNorm(adjusted_dim, eps=1e-6, elementwise_affine=True),
+            nn.Linear(adjusted_dim, scaled_dim),
+            nn.GELU(),
+            nn.LayerNorm(scaled_dim, eps=1e-6, elementwise_affine=True),
+            nn.Dropout(p=0.3),
+            nn.Linear(scaled_dim, num_classes)
+        )
+
+        self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+
+    # ------------------------------------------------------------
+    # Utilidades
+    # ------------------------------------------------------------
+    @staticmethod
+    def _split_batch(batch):
+        """Aceita (features, y) ou (images, features, y). Retorna (features, y)."""
+        if len(batch) == 2:
+            feats, y = batch
+        elif len(batch) == 3:
+            _img, feats, y = batch  # imagens ignoradas
+        else:
+            raise ValueError("Batch deve ser (features, labels) ou (images, features, labels)")
+        return feats, y
+
+    def forward(self, features):
+        return self.net(features)
+
+    def _common_step(self, batch):
+        feats, y = self._split_batch(batch)
+        logits = self(feats)
+        loss = self.criterion(logits, y)
+        preds = logits.argmax(dim=1)
+        return loss, preds, y
+
+    # ------------------------------------------------------------
+    # Steps do Lightning
+    # ------------------------------------------------------------
+    def training_step(self, batch, batch_idx):
+        loss, preds, y = self._common_step(batch)
+        # métricas
+        self.train_accuracy(preds, y)
+        self.train_f1(preds, y)
+        self.train_precision(preds, y)
+        self.train_recall(preds, y)
+        # logs
+        self.log_dict({
+            'train_loss': loss,
+            'train_accuracy': self.train_accuracy,
+        }, prog_bar=True, on_step=False, on_epoch=True)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        loss, preds, y = self._common_step(batch)
+        self.val_accuracy(preds, y)
+        self.val_f1(preds, y)
+        self.val_precision(preds, y)
+        self.val_recall(preds, y)
+        self.log_dict({
+            'val_loss': loss,
+            'val_accuracy': self.val_accuracy,
+        }, prog_bar=True, on_step=False, on_epoch=True)
+
+    def test_step(self, batch, batch_idx):
+        loss, preds, y = self._common_step(batch)
+        self.test_accuracy(preds, y)
+        self.test_f1(preds, y)
+        self.test_precision(preds, y)
+        self.test_recall(preds, y)
+        self.test_confusion_matrix(preds, y)
+
+        self.log("test_loss", loss, prog_bar=True, on_epoch=True)
+        self.log("test_accuracy", self.test_accuracy.compute(), prog_bar=True)
+        self.log("test_f1",        self.test_f1.compute(),        prog_bar=True)
+        self.log("test_precision", self.test_precision.compute(), prog_bar=True)
+        self.log("test_recall",    self.test_recall.compute(),    prog_bar=True)
+
+        return {
+            "test_loss": loss,
+            "test_accuracy": self.test_accuracy.compute(),
+            "test_f1": self.test_f1.compute(),
+            "test_precision": self.test_precision.compute(),
+            "test_recall": self.test_recall.compute(),
+        }
+
+    def on_test_epoch_end(self):
+        # reset das métricas e retorno da matriz de confusão
+        confm = self.test_confusion_matrix.compute().cpu().numpy()
+        self.test_confusion_matrix.reset()
+        self.test_accuracy.reset(); self.test_f1.reset()
+        self.test_precision.reset(); self.test_recall.reset()
+        print("✅ Matriz de Confusão calculada após o teste (features-only).")
+        return confm
+
+    # ------------------------------------------------------------
+    # Otimizador e Scheduler
+    # ------------------------------------------------------------
+    def configure_optimizers(self):
+        opt = torch.optim.AdamW(self.parameters(),
+                                lr=self.learning_rate,
+                                weight_decay=self.weight_decay,
+                                betas=self.optimizer_momentum)
+        sch = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=self.epochs)
+        return {"optimizer": opt, "lr_scheduler": sch}
