@@ -72,13 +72,12 @@ def train_model(config=None):
         # Mantém nomes/assinatura compatíveis com seu YAML / molde original
         # ----------------------------
         model = CustomFeaturesOnlyModel(
-            tmodel=hyperparams.get("TMODEL", "vector_only"),
-            name_dataset=hyperparams.get("NAME_DATASET", "features"),
-            shape=hyperparams.get("SHAPE", (0, 0)),              # aceito/ignorado
+            name_dataset=hyperparams.get("NAME_DATASET"),
+            shape=hyperparams.get("SHAPE"),              # aceito/ignorado
             epochs=int(hyperparams['MAX_EPOCHS']),
             learning_rate=float(config_sweep.learning_rate),
             features_dim=int(hyperparams['FEATURES_DIM']),
-            drop_path_rate=float(config_sweep.get('drop_path_rate', 0.0)),  # aceito/ignorado
+            drop_path_rate=float(config_sweep.get('drop_path_rate')),  # aceito/ignorado
             num_classes=int(hyperparams['NUM_CLASSES']),
             label_smoothing=float(config_sweep.label_smoothing),
             optimizer_momentum=(float(config_sweep.optimizer_momentum), 0.999),
