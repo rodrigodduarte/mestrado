@@ -94,7 +94,7 @@ def train_model(config=None):
 
         # Callback de Early Stopping
         epoch_callback = EarlyStoppingAtSpecificEpoch(
-            patience=2,
+            patience=3,
             threshold=1e-3,
             monitor="val_loss",
             mode="min",
@@ -103,8 +103,8 @@ def train_model(config=None):
 
         early_stop_callback = EarlyStopCallback(
             metric_name="val_loss",  # Métrica a ser monitorada
-            threshold=0.5,          # Valor limite
-            target_epoch=3          # Época em que verificar (índice começa em 0)
+            threshold=0.7,          # Valor limite
+            target_epoch=5          # Época em que verificar (índice começa em 0)
         )
 
         # Configurar o Trainer
