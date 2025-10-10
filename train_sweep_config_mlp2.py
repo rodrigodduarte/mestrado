@@ -68,14 +68,12 @@ def train_model(config=None):
             epochs=hyperparams['MAX_EPOCHS'],
             learning_rate=float(config_sweep.learning_rate),
             features_dim=hyperparams["FEATURES_DIM"],
-            scale_factor=hyperparams['SCALE_FACTOR'],
             drop_path_rate=config_sweep.drop_path_rate,
             num_classes=hyperparams['NUM_CLASSES'],
             label_smoothing=config_sweep.label_smoothing,
             optimizer_momentum=(config_sweep.optimizer_momentum, 0.999),  # AdamW usa dois betas
             weight_decay=float(config_sweep.weight_decay),
-            layer_scale=config_sweep.layer_scale,
-            mlp_vector_model_scale=config_sweep.mlp_vector_model_scale
+            layer_scale=config_sweep.layer_scale
         )
 
         # Configurar o logger do W&B
