@@ -607,14 +607,6 @@ class ReLuMLP2L(pl.LightningModule):
         return {"optimizer": opt, "lr_scheduler": sch}
 
 
-import torch
-from torch import nn
-import torch.nn.functional as F
-import pytorch_lightning as pl
-from torchmetrics import Accuracy, F1Score, Precision, Recall
-from torchmetrics.classification import MulticlassConfusionMatrix
-
-
 class CustomFeaturesOnlyModel(pl.LightningModule):
     """
     Modelo para treinamento ISOLADO do vetor de características.
@@ -823,3 +815,302 @@ class CustomFeaturesOnlyModel(pl.LightningModule):
                                 betas=self.optimizer_momentum)
         sch = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=self.epochs)
         return {"optimizer": opt, "lr_scheduler": sch}
+    
+
+class CustomEnsembleModel_MLP2(pl.LightningModule):
+    def __init__(self,
+                 tmodel: str,                     # convnext | swin
+                 name_dataset: str,
+                 shape: tuple,
+                 epochs: int,
+                 learning_rate: float,
+                 features_dim: int,
+                 drop_path_rate: float,
+                 num_classes: int,
+                 label_smoothing: float,
+                 optimizer_momentum: tuple,
+                 weight_decay: float,
+                 layer_scale: float):
+        super().__init__()
+        self.save_hyperparameters()
+
+        self.tmodel = tmodel.lower()
+        self.num_classes = num_classes
+        self.features_dim = features_dim
+        self.layer_scale = layer_scale
+        self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
+        self.optimizer_momentum = optimizer_momentum
+
+        self.train_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
+        self.val_accuracy   = Accuracy(task='multiclass', num_classes=num_classes)
+        self.test_accuracy  = Accuracy(task='multiclass', num_classes=num_classes)
+
+        self.train_f1 = F1Score(task="multiclass", num_classes=num_classes)
+        self.val_f1   = F1Score(task="multiclass", num_classes=num_classes)
+        self.test_f1  = F1Score(task="multiclass", num_classes=num_classes)
+
+        self.train_precision = Precision(task="multiclass", num_classes=num_classes)
+        self.val_precision   = Precision(task="multiclass", num_classes=num_classes)
+        self.test_precision  = Precision(task="multiclass", num_classes=num_classes)
+
+        self.train_recall = Recall(task="multiclass", num_classes=num_classes)
+        self.val_recall   = Recall(task="multiclass", num_classes=num_classes)
+        self.test_recall  = Recall(task="multiclass", num_classes=num_classes)
+
+        self.test_confusion_matrix = MulticlassConfusionMatrix(num_classes=num_classes)
+
+
+        if self.tmodel in {"convnext_t", "convnext", "convnext_tiny"}:
+            self.backbone = models.convnext_tiny(
+                weights=ConvNeXt_Tiny_Weights.DEFAULT,
+                drop_path_rate=drop_path_rate
+            )
+            self.backbone.classifier = nn.Sequential(
+                nn.Flatten(start_dim=1),
+                nn.LayerNorm(768, eps=1e-6, elementwise_affine=True)
+            )
+            backbone_dim = 768
+        elif self.tmodel in {"swin_t", "swin", "swin_transformer"}:
+            self.backbone = swin_t(weights=Swin_T_Weights.DEFAULT)
+            self.backbone.head = nn.Sequential(
+                nn.Flatten(start_dim=1),
+                nn.LayerNorm(768, eps=1e-6, elementwise_affine=True)
+            )
+            backbone_dim = 768
+        else:
+            raise ValueError(f"tmodel '{tmodel}' não suportado. Use 'convnext' ou 'swin'.")
+
+
+        adjusted_dim = backbone_dim + self.features_dim
+        hidden = int(adjusted_dim * layer_scale)
+
+        self.ensemble_model = nn.Sequential(
+            nn.Linear(adjusted_dim, hidden),
+            nn.GELU(),
+            nn.LayerNorm(hidden),
+            nn.Dropout(0.3),
+
+            nn.Linear(hidden, hidden),   
+            nn.GELU(),
+            nn.LayerNorm(hidden),
+            nn.Dropout(0.3),
+
+            nn.Linear(hidden, num_classes)
+        )
+
+        self.fn_loss = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+
+    def forward(self, x, features):
+        z_img = self.backbone(x)                   # [B, 768]
+        z = torch.cat((z_img, features), dim=1)    # [B, 768 + features_dim]
+        logits = self.ensemble_model(z)            # [B, num_classes]
+        return logits
+
+    def _common_step(self, batch, batch_idx):
+        images, features, labels = batch
+        logits = self.forward(images, features)
+        loss = self.fn_loss(logits, labels)
+        preds = torch.argmax(logits, 1)
+        return images, features, labels, logits, loss, preds
+
+    def training_step(self, batch, batch_idx):
+        images, features, labels, logits, loss, preds = self._common_step(batch, batch_idx)
+        self.train_accuracy(preds, labels)
+        self.log('train_loss', loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log('train_accuracy', self.train_accuracy, prog_bar=True, on_step=False, on_epoch=True)
+        return {'loss': loss}
+
+    def validation_step(self, batch, batch_idx):
+        images, features, labels, logits, loss, preds = self._common_step(batch, batch_idx)
+        self.val_accuracy(preds, labels)
+        self.log('val_loss', loss, prog_bar=True, on_epoch=True)
+        self.log('val_accuracy', self.val_accuracy, prog_bar=True, on_epoch=True)
+        return {'val_loss': loss}
+
+    def test_step(self, batch, batch_idx):
+        images, features, labels, logits, loss, preds = self._common_step(batch, batch_idx)
+        self.test_accuracy(preds, labels)
+        self.test_f1(preds, labels)
+        self.test_precision(preds, labels)
+        self.test_recall(preds, labels)
+        self.test_confusion_matrix(preds, labels)
+
+        self.log("test_loss", loss, prog_bar=True, on_epoch=True)
+        self.log("test_accuracy", self.test_accuracy.compute(), prog_bar=True)
+        self.log("test_f1", self.test_f1.compute(), prog_bar=True)
+        self.log("test_precision", self.test_precision.compute(), prog_bar=True)
+        self.log("test_recall", self.test_recall.compute(), prog_bar=True)
+
+        return {
+            "test_loss": loss,
+            "test_accuracy": self.test_accuracy.compute(),
+            "test_f1": self.test_f1.compute(),
+            "test_precision": self.test_precision.compute(),
+            "test_recall": self.test_recall.compute()
+        }
+
+    def on_test_epoch_end(self):
+        self.test_accuracy.reset()
+        self.test_f1.reset()
+        self.test_precision.reset()
+        self.test_recall.reset()
+        conf_matrix_value = self.test_confusion_matrix.compute().cpu().numpy()
+        self.test_confusion_matrix.reset()
+        print("✅ Matriz de Confusão calculada após o teste.")
+        return conf_matrix_value
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(self.parameters(),
+                                      lr=self.learning_rate,
+                                      weight_decay=self.weight_decay,
+                                      betas=self.optimizer_momentum)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.hparams.epochs)
+        return {"optimizer": optimizer, "lr_scheduler": scheduler}
+
+
+class CustomModelTriple_MLP2(pl.LightningModule):
+    def __init__(self,
+                 name_dataset: str,
+                 shape: tuple,
+                 epochs: int,
+                 learning_rate: float,
+                 features_dim: int,
+                 drop_path_rate: float,
+                 num_classes: int,
+                 label_smoothing: float,
+                 optimizer_momentum: tuple,
+                 weight_decay: float,
+                 layer_scale: float):
+        super().__init__()
+        self.save_hyperparameters()
+
+        self.num_classes = num_classes
+        self.features_dim = features_dim
+        self.layer_scale = layer_scale
+        self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
+        self.optimizer_momentum = optimizer_momentum
+
+        self.train_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
+        self.val_accuracy   = Accuracy(task='multiclass', num_classes=num_classes)
+        self.test_accuracy  = Accuracy(task='multiclass', num_classes=num_classes)
+
+        self.train_f1 = F1Score(task="multiclass", num_classes=num_classes)
+        self.val_f1   = F1Score(task="multiclass", num_classes=num_classes)
+        self.test_f1  = F1Score(task="multiclass", num_classes=num_classes)
+
+        self.train_precision = Precision(task="multiclass", num_classes=num_classes)
+        self.val_precision   = Precision(task="multiclass", num_classes=num_classes)
+        self.test_precision  = Precision(task="multiclass", num_classes=num_classes)
+
+        self.train_recall = Recall(task="multiclass", num_classes=num_classes)
+        self.val_recall   = Recall(task="multiclass", num_classes=num_classes)
+        self.test_recall  = Recall(task="multiclass", num_classes=num_classes)
+
+        self.test_confusion_matrix = MulticlassConfusionMatrix(num_classes=num_classes)
+
+        self.convnext_model = models.convnext_tiny(
+            weights=ConvNeXt_Tiny_Weights.DEFAULT,
+            drop_path_rate=drop_path_rate
+        )
+        self.convnext_model.classifier = nn.Sequential(
+            nn.Flatten(start_dim=1),
+            nn.LayerNorm(768, eps=1e-6, elementwise_affine=True)
+        )
+
+        self.swint_model = swin_t(weights=Swin_T_Weights.DEFAULT)
+        self.swint_model.head = nn.Sequential(
+            nn.Flatten(start_dim=1),
+            nn.LayerNorm(768, eps=1e-6, elementwise_affine=True)
+        )
+
+
+        self.image_dim = 1536  
+
+        adjusted_dim = self.image_dim + self.features_dim
+        hidden = int(adjusted_dim * layer_scale)
+
+        self.ensemble_model = nn.Sequential(
+            nn.Linear(adjusted_dim, hidden),
+            nn.GELU(),
+            nn.LayerNorm(hidden),
+            nn.Dropout(0.3),
+
+            nn.Linear(hidden, hidden),           
+            nn.GELU(),
+            nn.LayerNorm(hidden),
+            nn.Dropout(0.3),
+
+            nn.Linear(hidden, num_classes)
+        )
+
+        self.fn_loss = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+
+    def forward(self, x, features):
+        x_conv = self.convnext_model(x)
+        x_swin = self.swint_model(x)
+        x_img = torch.cat((x_conv, x_swin), dim=1)
+        x_total = torch.cat((x_img, features), dim=1)
+        return self.ensemble_model(x_total)
+
+    def _common_step(self, batch, batch_idx):
+        images, features, labels = batch
+        logits = self.forward(images, features)
+        loss = self.fn_loss(logits, labels)
+        preds = torch.argmax(logits, 1)
+        return images, features, labels, logits, loss, preds
+
+    def training_step(self, batch, batch_idx):
+        images, features, labels, logits, loss, preds = self._common_step(batch, batch_idx)
+        self.train_accuracy(preds, labels)
+        self.log('train_loss', loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log('train_accuracy', self.train_accuracy, prog_bar=True, on_step=False, on_epoch=True)
+        return {'loss': loss}
+
+    def validation_step(self, batch, batch_idx):
+        images, features, labels, logits, loss, preds = self._common_step(batch, batch_idx)
+        self.val_accuracy(preds, labels)
+        self.log('val_loss', loss, prog_bar=True, on_epoch=True)
+        self.log('val_accuracy', self.val_accuracy, prog_bar=True, on_epoch=True)
+        return {'val_loss': loss}
+
+    def test_step(self, batch, batch_idx):
+        images, features, labels, logits, loss, preds = self._common_step(batch, batch_idx)
+        self.test_accuracy(preds, labels)
+        self.test_f1(preds, labels)
+        self.test_precision(preds, labels)
+        self.test_recall(preds, labels)
+        self.test_confusion_matrix(preds, labels)
+
+        self.log("test_loss", loss, prog_bar=True, on_epoch=True)
+        self.log("test_accuracy", self.test_accuracy.compute(), prog_bar=True)
+        self.log("test_f1", self.test_f1.compute(), prog_bar=True)
+        self.log("test_precision", self.test_precision.compute(), prog_bar=True)
+        self.log("test_recall", self.test_recall.compute(), prog_bar=True)
+
+        return {
+            "test_loss": loss,
+            "test_accuracy": self.test_accuracy.compute(),
+            "test_f1": self.test_f1.compute(),
+            "test_precision": self.test_precision.compute(),
+            "test_recall": self.test_recall.compute()
+        }
+
+    def on_test_epoch_end(self):
+        self.test_accuracy.reset()
+        self.test_f1.reset()
+        self.test_precision.reset()
+        self.test_recall.reset()
+        conf_matrix_value = self.test_confusion_matrix.compute().cpu().numpy()
+        self.test_confusion_matrix.reset()
+        print("✅ Matriz de Confusão calculada após o teste.")
+        return conf_matrix_value
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(self.parameters(),
+                                      lr=self.learning_rate,
+                                      weight_decay=self.weight_decay,
+                                      betas=self.optimizer_momentum)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.hparams.epochs)
+        return {"optimizer": optimizer, "lr_scheduler": scheduler}
