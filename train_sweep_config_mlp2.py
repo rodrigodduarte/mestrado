@@ -127,7 +127,7 @@ def train_model(config=None):
         trainer.fit(model, data_module)
 
         # Carregar o melhor modelo salvo após o treinamento
-        model = CustomEnsembleModel.load_from_checkpoint(checkpoint_path)
+        model = CustomEnsembleModel_MLP2.load_from_checkpoint(checkpoint_path)
 
         # Testar o modelo carregado
         trainer.test(model, data_module)
@@ -193,8 +193,8 @@ if __name__ == "__main__":
                 'distribution': 'uniform'
             },
             'layer_scale': {
-                'min': 0.5,
-                'max': 1.5,
+                'min': 3,
+                'max': 5,
                 'distribution': 'uniform'
             },
             'drop_path_rate': {
