@@ -171,7 +171,7 @@ if __name__ == "__main__":
         'parameters': {
             'learning_rate': {
                 'min': 1e-5,
-                'max': 2e-4,
+                'max': 1e-4,
                 'distribution': 'uniform'
             },
             'weight_decay': {
@@ -180,23 +180,18 @@ if __name__ == "__main__":
                 'distribution': 'uniform'
             },
             'optimizer_momentum': {
-                'min': 0.92,
-                'max': 0.99,
-                'distribution': 'uniform'
-            },
-            'mlp_vector_model_scale': {
-                'min': 0.8,
-                'max': 1.3,
+                'min': 0.93,
+                'max': 0.97,
                 'distribution': 'uniform'
             },
             'layer_scale': {
-                'min': 3,
+                'min': 1.8,
                 'max': 5,
                 'distribution': 'uniform'
             },
             'drop_path_rate': {
-                'min': 0.0,
-                'max': 0.5,
+                'min': 0.1,
+                'max': 0.3,
                 'distribution': 'uniform'
             },
             'label_smoothing': {
