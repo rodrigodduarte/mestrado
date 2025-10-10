@@ -62,7 +62,6 @@ def train_model(config=None):
 
         # Configurar o modelo
         model = CustomModelTriple_MLP2(
-            tmodel=hyperparams["TMODEL"],
             name_dataset=hyperparams["NAME_DATASET"],
             shape=hyperparams["SHAPE"],
             epochs=hyperparams['MAX_EPOCHS'],
@@ -71,7 +70,7 @@ def train_model(config=None):
             drop_path_rate=config_sweep.drop_path_rate,
             num_classes=hyperparams['NUM_CLASSES'],
             label_smoothing=config_sweep.label_smoothing,
-            optimizer_momentum=(config_sweep.optimizer_momentum, 0.999),  # AdamW usa dois betas
+            optimizer_momentum=(config_sweep.optimizer_momentum, 0.999), 
             weight_decay=float(config_sweep.weight_decay),
             layer_scale=config_sweep.layer_scale
         )
