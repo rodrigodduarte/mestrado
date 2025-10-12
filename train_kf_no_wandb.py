@@ -131,11 +131,11 @@ def train_model():
         dm = CustomImageModule_kf(
             name_dataset=hyperparams["TRAIN_DIR"],
             test_dir=hyperparams["TEST_DIR"],
-            shape=hyperparams{["SHAPE"]}
+            shape=hyperparams{["SHAPE"]},
             batch_size=hyperparams["BATCH_SIZE"],
             num_workers=hyperparams("NUM_WORKERS"),
             n_splits=k_splits,
-            fold_idx=fold,
+            fold_idx=fold
         )
 
         output_root = hyperparams.get("OUTPUT_DIR", "modelos_kf")
