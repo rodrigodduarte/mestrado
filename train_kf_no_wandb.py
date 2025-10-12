@@ -7,7 +7,7 @@ import numpy as np
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import TQDMProgressBar, ModelCheckpoint
 from model import CustomEnsembleModel
-from kf_data import CustomImageCSVModule_kf
+from kf_data import CustomImageModule_kf
 from callbacks import (
     EarlyStoppingAtSpecificEpoch,
     SaveBestOrLastModelCallback,
@@ -128,12 +128,14 @@ def train_model():
         print(f"\n==================== Seed {seed} ====================")
         set_random_seeds(seed)
 
-        dm = CustomImageCSVModule_kf(
-            name_dataset=hyperparams["NAME_DATASET"],
+        dm = CustomImageModule_kf(
+            name_dataset=hyperparams["TRAIN_DIR"],
+            test_dir=hyperparams["TEST_DIR"],
+            shape=hyperparams{["SHAPE"]}
             batch_size=hyperparams["BATCH_SIZE"],
-            num_workers=hyperparams.get("NUM_WORKERS", 4),
-            img_shape=hyperparams["SHAPE"],
-            k_folds=hyperparams["K_FOLDS"],
+            num_workers=hyperparams("NUM_WORKERS"),
+            n_splits=k_splits,
+            fold_idx=fold,
         )
 
         output_root = hyperparams.get("OUTPUT_DIR", "modelos_kf")
