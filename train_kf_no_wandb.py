@@ -122,21 +122,12 @@ def gather_predictions(model, dataloader, num_classes):
 def train_model():
     with open("config.yaml", "r") as f:
         hyperparams = yaml.safe_load(f)
+        k_splits: int = hyperparams["K_FOLDS"]
 
     n_seeds = hyperparams.get("N_SEEDS", 1)
     for seed in range(42, 42 + n_seeds):
         print(f"\n==================== Seed {seed} ====================")
         set_random_seeds(seed)
-
-        dm = CustomImageModule_kf(
-            name_dataset=hyperparams["TRAIN_DIR"],
-            test_dir=hyperparams["TEST_DIR"],
-            shape=hyperparams{["SHAPE"]},
-            batch_size=hyperparams["BATCH_SIZE"],
-            num_workers=hyperparams("NUM_WORKERS"),
-            n_splits=k_splits,
-            fold_idx=fold
-        )
 
         output_root = hyperparams.get("OUTPUT_DIR", "modelos_kf")
         tag_ne = "_ne" if not hyperparams.get("USE_ENSEMBLE", True) else ""
@@ -156,8 +147,16 @@ def train_model():
         )
 
         with open(result_path, "w") as log:
-            for fold in range(dm.k_folds):
-                dm.setup_fold(fold)
+            for fold in range(fold):
+                dm = CustomImageModule_kf(
+                name_dataset=hyperparams["TRAIN_DIR"],
+                test_dir=hyperparams["TEST_DIR"],
+                shape=hyperparams["SHAPE"],
+                batch_size=hyperparams["BATCH_SIZE"],
+                num_workers=hyperparams["NUM_WORKERS"],
+                n_splits=k_splits,
+                fold_idx=fold
+            )
                 model = CustomEnsembleModel(
                     tmodel=hyperparams["TMODEL"],
                     name_dataset=hyperparams["NAME_DATASET"],
