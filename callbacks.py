@@ -205,3 +205,27 @@ class EarlyStopCallback(pl.callbacks.Callback):
                 
     def should_stop_training(self):
         return self.early_stop_counter  # 🔹 Retorna True se o contador foi ativado
+
+class TrainEpochTimeCallback(pl.callbacks.Callback):
+    def __init__(self):
+        self.epoch_times = []
+        self._start = None
+
+    def on_train_epoch_start(self, trainer, pl_module):
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        self._start = time.perf_counter()
+
+    def on_train_epoch_end(self, trainer, pl_module):
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        if self._start is not None:
+            dt = time.perf_counter() - self._start
+            self.epoch_times.append(dt)
+            self._start = None
+
+    def mean_std(self):
+        if not self.epoch_times:
+            return float('nan'), float('nan')
+        arr = np.array(self.epoch_times, dtype=float)
+        return float(arr.mean()), float(arr.std(ddof=1) if arr.size > 1 else 0.0)
