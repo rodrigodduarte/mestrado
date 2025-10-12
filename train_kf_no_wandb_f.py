@@ -150,13 +150,19 @@ def train_model():
 
             best_model_path = fold_callback.best_model_path
 
-            # Carregar epoch do melhor modelo
-            checkpoint_data = torch.load(best_model_path, map_location='cpu')
+            # Carregar epoch do melhor modelo (deixa explícito p/ futuro default do torch)
+            checkpoint_data = torch.load(best_model_path, map_location='cpu', weights_only=False)  # >>>
             best_epoch = checkpoint_data.get('epoch', None)
             print(f"Melhor modelo para seed {seed}, fold {fold} salvo na época {best_epoch}")
 
             # Avaliação (val e test) no melhor checkpoint
             model = CustomEnsembleModel.load_from_checkpoint(best_model_path)
+
+            # >>> preparar split de teste (evita AttributeError: test_ds)
+            try:
+                data_module.setup(stage='test')
+            except Exception:
+                pass
 
             # Validation
             val_metrics = trainer.validate(model, datamodule=data_module, verbose=False)[0]
@@ -171,9 +177,22 @@ def train_model():
             test_elapsed_sec = time.perf_counter() - t1
 
             # ms por amostra (estimativa geral do loop de teste)
-            test_inf_ms_per_sample = (test_elapsed_sec * 1000.0 / num_test_samples) if num_test_samples > 0 else float('nan')
+            test_inf_ms_per_sample = (test_elapsed_sec * 1000.0 / num_test_samples) if num_test_samples > 0 else float('nan')  # >>>
+            # throughput (amostras/s)
+            test_throughput = (num_test_samples / test_elapsed_sec) if test_elapsed_sec > 0 else float('nan')  # >>>
+            # pico de memória (MB) e tamanho do ckpt (MB) — best effort
+            max_gpu_mem_mb = None  # >>>
+            if torch.cuda.is_available():
+                try:
+                    max_gpu_mem_mb = torch.cuda.max_memory_allocated() / 1e6
+                except Exception:
+                    max_gpu_mem_mb = None
+            try:
+                model_size_mb = os.path.getsize(best_model_path) / 1e6  # >>>
+            except Exception:
+                model_size_mb = None
 
-            # Acumula métricas para estatística ao final
+            # Acumula métricas para estatística ao final (mantido)
             for metric_name, metric_value in val_metrics.items():
                 if isinstance(metric_value, (int, float, np.floating)):
                     metrics_history.setdefault(f"val/{metric_name}", []).append(float(metric_value))
@@ -184,7 +203,7 @@ def train_model():
             metrics_history.setdefault("train_time_sec", []).append(float(train_time_sec))
             metrics_history.setdefault("test_inf_ms_per_sample", []).append(float(test_inf_ms_per_sample))
 
-            # Registro por linha no arquivo consolidado
+            # Registro por linha no arquivo consolidado (mantido)
             with open(resultados_path, "a") as f:
                 f.write(
                     f"{seed}\t{fold}\t{best_epoch}\t"
@@ -192,6 +211,23 @@ def train_model():
                     f"{json.dumps(val_metrics, ensure_ascii=False)}\t"
                     f"{json.dumps(test_metrics, ensure_ascii=False)}\n"
                 )
+
+            # >>> Novo: salvar um .txt por FOLD (sobrescreve a cada execução)
+            fold_txt_path = os.path.join(fold_dir, "resultados_fold.txt")
+            with open(fold_txt_path, "w") as f:
+                f.write(f"Seed: {seed}\n")
+                f.write(f"Fold: {fold}\n")
+                f.write(f"best_epoch: {best_epoch}\n")
+                f.write(f"train_time_sec: {train_time_sec:.6f}\n")
+                f.write(f"test_time_sec: {test_elapsed_sec:.6f}\n")
+                f.write(f"test_inf_ms_per_sample: {test_inf_ms_per_sample:.6f}\n")
+                f.write(f"throughput_samples_per_sec: {test_throughput:.6f}\n")
+                if max_gpu_mem_mb is not None:
+                    f.write(f"max_gpu_mem_mb: {max_gpu_mem_mb:.2f}\n")
+                if model_size_mb is not None:
+                    f.write(f"best_checkpoint_size_mb: {model_size_mb:.2f}\n")
+                f.write(f"val_metrics_json: {json.dumps(val_metrics, ensure_ascii=False)}\n")
+                f.write(f"test_metrics_json: {json.dumps(test_metrics, ensure_ascii=False)}\n")
 
             # Libera GPU
             del model
