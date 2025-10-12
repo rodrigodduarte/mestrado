@@ -275,6 +275,7 @@ def train_model(config_path: str = "config.yaml"):
                 epochs=hparams["MAX_EPOCHS"],
                 shape=hparams["SHAPE"],
                 learning_rate=hparams["LEARNING_RATE"],
+                features_dim=hparams["FEATURES_DIM"],
                 drop_path_rate=hparams["DROP_PATH_RATE"],
                 num_classes=hparams["NUM_CLASSES"],
                 label_smoothing=hparams["LABEL_SMOOTHING"],
