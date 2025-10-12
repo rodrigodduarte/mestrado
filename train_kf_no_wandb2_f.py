@@ -17,7 +17,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import TQDMProgressBar, ModelCheckpoint, Callback
 
 # Importa apenas a versão atual do modelo (sem ensemble)
-from model import CustomModel
+from model import CustomEnsembleModel
 from kf_data import CustomImageModule_kf
 # (sem callbacks extras não utilizados)
 
@@ -269,7 +269,7 @@ def train_model(config_path: str = "config.yaml"):
             data_module.setup(stage="fit")
 
             # Modelo
-            model = CustomModel(
+            model = CustomEnsembleModel(
                 tmodel=hparams["TMODEL"],
                 name_dataset=hparams["NAME_DATASET"],
                 epochs=hparams["MAX_EPOCHS"],
@@ -279,7 +279,8 @@ def train_model(config_path: str = "config.yaml"):
                 num_classes=hparams["NUM_CLASSES"],
                 label_smoothing=hparams["LABEL_SMOOTHING"],
                 optimizer_momentum=(hparams["OPTIMIZER_MOMENTUM"], 0.999),
-                weight_decay=hparams.get("WEIGHT_DECAY", 0.0),
+                weight_decay=hparams("WEIGHT_DECAY"),
+                layer_scale=hparams["LAYER_SCALE"]
             )
 
             # Trainer
