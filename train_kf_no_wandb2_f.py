@@ -215,7 +215,7 @@ class EpochMetricsToFileCallback(Callback):
 # Função principal de treino (k-fold)
 # -----------------------------------------------------------------------------
 
-def train_model(config_path: str = "config2.yaml"):
+def train_model(config_path: str = "config.yaml"):
     hparams = load_hyperparameters(config_path)
     k_splits: int = hparams["K_FOLDS"]
 
