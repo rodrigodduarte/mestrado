@@ -279,7 +279,7 @@ def train_model(config_path: str = "config.yaml"):
                 num_classes=hparams["NUM_CLASSES"],
                 label_smoothing=hparams["LABEL_SMOOTHING"],
                 optimizer_momentum=(hparams["OPTIMIZER_MOMENTUM"], 0.999),
-                weight_decay=hparams("WEIGHT_DECAY"),
+                weight_decay=hparams.get("WEIGHT_DECAY", 0.0),
                 layer_scale=hparams["LAYER_SCALE"]
             )
 
