@@ -26,6 +26,12 @@ WEIGHT_DECAY: 0.000019472
 K_FOLDS: 5
 N_SEEDS: 10
 
+USE_WEIGHTED_SAMPLER: true     # ativa amostragem balanceada no treino
+SAMPLER_REPLACEMENT: true      # comum para imbalanced (com reposição)
+USE_CLASS_WEIGHTS: true        # aplica pesos na loss (modelo deve consumir)
+WEIGHT_MODE: inv_freq          # ou: effective_num
+CB_BETA: 0.9999                # apenas se usar effective_num
+
 # Configurações de hardware e execução
 NUM_WORKERS: 4
 ACCELERATOR: "gpu"

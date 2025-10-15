@@ -1156,23 +1156,18 @@ class CustomEnsembleModelWeighted(pl.LightningModule):
         self.model_dim = 0
         self.validation_step_outputs = []
         
-        # Métricas
-        self.train_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
-        self.val_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
-        self.test_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
-
-        self.train_f1 = F1Score(task="multiclass", num_classes=num_classes)
-        self.val_f1 = F1Score(task="multiclass", num_classes=num_classes)       
-        self.test_f1 = F1Score(task="multiclass", num_classes=num_classes) 
+        self.train_f1 = F1Score(task="multiclass", num_classes=num_classes, average="macro")
+        self.val_f1   = F1Score(task="multiclass", num_classes=num_classes, average="macro")
+        self.test_f1  = F1Score(task="multiclass", num_classes=num_classes, average="macro")
         
-        self.train_precision = Precision(task="multiclass", num_classes=num_classes)
-        self.val_precision = Precision(task="multiclass", num_classes=num_classes)
-        self.test_precision = Precision(task="multiclass", num_classes=num_classes)
+        self.train_precision = Precision(task="multiclass", num_classes=num_classes, average="macro")
+        self.val_precision   = Precision(task="multiclass", num_classes=num_classes, average="macro")
+        self.test_precision  = Precision(task="multiclass", num_classes=num_classes, average="macro")
         
-        self.train_recall = Recall(task="multiclass", num_classes=num_classes)
-        self.val_recall = Recall(task="multiclass", num_classes=num_classes)
-        self.test_recall = Recall(task="multiclass", num_classes=num_classes)
-
+        self.train_recall = Recall(task="multiclass", num_classes=num_classes, average="macro")
+        self.val_recall   = Recall(task="multiclass", num_classes=num_classes, average="macro")
+        self.test_recall  = Recall(task="multiclass", num_classes=num_classes, average="macro")
+        
         self.test_confusion_matrix = MulticlassConfusionMatrix(num_classes=num_classes)
 
 

@@ -385,10 +385,16 @@ class CustomImageCSVModule_kf_db(pl.LightningDataModule):
 
     def setup(self, stage=None):
         """Configura os datasets de treino, validação e teste."""
-        if stage == "fit" or stage is None:
-            full_dataset = CustomImageWithFeaturesDataset(
-                data_dir=self.train_dir,
-                transform=self.image_transform
+        if stage == "test" or stage is None:
+            test_transform = v2.Compose([
+                v2.ToImage(),
+                v2.Resize(self.shape, interpolation=PIL.Image.BILINEAR, antialias=False),
+                v2.ToDtype(torch.float32, scale=True),
+                v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ])
+            self.test_ds = CustomImageWithFeaturesDataset(
+                data_dir=self.test_dir,
+                transform=test_transform
             )
 
             # Labels completos para estratificar
