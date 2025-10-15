@@ -9,7 +9,7 @@ import random
 from pytorch_lightning.callbacks import TQDMProgressBar, ModelCheckpoint
 
 # Modelo com suporte a pesos (idêntico ao original + set_class_weights)
-from model_weighted import CustomEnsembleModelWeighted as CustomEnsembleModel
+from model import CustomEnsembleModelWeighted as CustomEnsembleModel
 
 # Novo DataModule com StratifiedKFold + WeightedRandomSampler + class_weights
 from kf_data import CustomImageCSVModule_kf_db
