@@ -3,8 +3,8 @@ import shutil
 from sklearn.model_selection import train_test_split
 
 # Caminho para o diretório contendo suas classes com imagens
-caminho_diretorio_original = 'imagens/flavia_t'
-caminho_diretorio_novo = 'imagens/flavia'
+caminho_diretorio_original = 'imagens/soja1'
+caminho_diretorio_novo = 'imagens/soja'
 
 # Lista de todas as classes no diretório original
 classes = os.listdir(caminho_diretorio_original)
