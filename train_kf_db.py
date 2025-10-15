@@ -123,11 +123,7 @@ def train_model():
                 drop_path_rate=hyperparams['DROP_PATH_RATE'],
                 num_classes=hyperparams['NUM_CLASSES'],
                 label_smoothing=hyperparams['LABEL_SMOOTHING'],
-                optimizer_momentum=(
-                    (hyperparams['OPTIMIZER_MOMENTUM'], 0.999)
-                    if isinstance(hyperparams['OPTIMIZER_MOMENTUM'], float)
-                    else hyperparams['OPTIMIZER_MOMENTUM']
-                ),
+                optimizer_momentum=hyperparams['OPTIMIZER_MOMENTUM'],
                 weight_decay=hyperparams['WEIGHT_DECAY'],
                 layer_scale=hyperparams['LAYER_SCALE']
             )
