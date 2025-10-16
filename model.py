@@ -1299,3 +1299,160 @@ class CustomModel_desbalanced(pl.LightningModule):
                 'frequency': 1,
             }
         }
+
+
+# model_features_patch.py
+import torch
+from torch import nn
+import torch.nn.functional as F
+import pytorch_lightning as pl
+from torchmetrics import Accuracy, F1Score, Precision, Recall
+from torchmetrics.classification import MulticlassConfusionMatrix
+
+class CustomFeaturesOnlyModelDropIn(pl.LightningModule):
+    """
+    Drop-in para treinar APENAS vetores de características com a mesma assinatura do CustomModel.
+    Aceita 'tmodel' e 'drop_path_rate' (ignorados), e suporta 'class_weights' como no treino com imagens.
+    Compatível com batches: (features, labels) OU (images, features, labels).
+    """
+    def __init__(self, tmodel, name_dataset, shape, epochs, learning_rate,
+                 drop_path_rate, num_classes, label_smoothing, optimizer_momentum,
+                 weight_decay, layer_scale, features_dim=1296, class_weights=None):
+        super().__init__()
+        self.save_hyperparameters()
+
+        self.num_classes = int(num_classes)
+        self.features_dim = int(features_dim)
+        self.learning_rate = float(learning_rate)
+        self.weight_decay = float(weight_decay)
+        self.optimizer_momentum = tuple(optimizer_momentum) if isinstance(optimizer_momentum, (list, tuple)) else (0.9, 0.999)
+        self.epochs = int(epochs)
+        self.layer_scale = float(layer_scale)
+
+        # Métricas
+        self.train_accuracy = Accuracy(task='multiclass', num_classes=self.num_classes)
+        self.val_accuracy   = Accuracy(task='multiclass', num_classes=self.num_classes)
+        self.test_accuracy  = Accuracy(task='multiclass', num_classes=self.num_classes)
+
+        self.train_f1 = F1Score(task="multiclass", num_classes=self.num_classes)
+        self.val_f1   = F1Score(task="multiclass", num_classes=self.num_classes)
+        self.test_f1  = F1Score(task="multiclass", num_classes=self.num_classes)
+
+        self.train_precision = Precision(task="multiclass", num_classes=self.num_classes)
+        self.val_precision   = Precision(task="multiclass", num_classes=self.num_classes)
+        self.test_precision  = Precision(task="multiclass", num_classes=self.num_classes)
+
+        self.train_recall = Recall(task="multiclass", num_classes=self.num_classes)
+        self.val_recall   = Recall(task="multiclass", num_classes=self.num_classes)
+        self.test_recall  = Recall(task="multiclass", num_classes=self.num_classes)
+
+        self.test_confusion_matrix = MulticlassConfusionMatrix(num_classes=self.num_classes)
+
+        # Cabeça MLP (sem imagens)
+        adjusted = self.features_dim
+        hidden = max(int(adjusted * self.layer_scale), max(64, self.num_classes))
+
+        self.input_norm = nn.LayerNorm(adjusted, eps=1e-6, elementwise_affine=True)
+        self.fc1 = nn.Linear(adjusted, hidden)
+        self.mid_norm = nn.LayerNorm(hidden, eps=1e-6, elementwise_affine=True)
+        self.dropout = nn.Dropout(p=0.3)
+        self.fc_out = nn.Linear(hidden, self.num_classes)
+
+        # perda (com pesos opcionais + label smoothing)
+        cw = None
+        if class_weights is not None:
+            try:
+                cw = torch.as_tensor(class_weights, dtype=torch.float32)
+            except Exception:
+                cw = None
+        self.register_buffer("class_weights", cw if cw is not None else None)
+        self.criterion = nn.CrossEntropyLoss(weight=self.class_weights, label_smoothing=float(label_smoothing))
+
+    # Utils -------
+    @staticmethod
+    def _extract(batch):
+        # Suporta (feats,y) ou (img,feats,y) ou dict
+        if isinstance(batch, dict):
+            feats = batch.get('features', None)
+            y = batch.get('label', None)
+            if feats is None or y is None:
+                raise ValueError("Batch dict deve conter 'features' e 'label'.")
+            return feats, y
+        if not isinstance(batch, (tuple, list)):
+            raise ValueError("Batch deve ser tupla/lista (features,label) ou (image,features,label).")
+        if len(batch) == 2:
+            feats, y = batch
+        elif len(batch) == 3:
+            _img, feats, y = batch
+        else:
+            raise ValueError("Batch deve ter 2 ou 3 elementos.")
+        return feats, y
+
+    @staticmethod
+    def _prep_feats(x):
+        if not torch.is_tensor(x): x = torch.tensor(x)
+        x = x.float()
+        if x.ndim == 1: x = x.unsqueeze(0)
+        elif x.ndim > 2: x = x.view(x.size(0), -1)
+        return x
+
+    @staticmethod
+    def _prep_labels(y):
+        if not torch.is_tensor(y): y = torch.tensor(y)
+        return y.long().view(-1)
+
+    # Forward -------
+    def forward(self, feats):
+        x = self._prep_feats(feats)
+        x = self.input_norm(x)
+        x = self.fc1(x)
+        x = torch.nn.functional.gelu(x)
+        x = self.mid_norm(x)
+        x = self.dropout(x)
+        x = self.fc_out(x)
+        return x
+
+    def _step(self, batch):
+        feats, y = self._extract(batch)
+        feats = self._prep_feats(feats)
+        y = self._prep_labels(y)
+        logits = self.forward(feats)
+        loss = self.criterion(logits, y)
+        preds = logits.argmax(1)
+        return loss, preds, y
+
+    # Steps -------
+    def training_step(self, batch, _):
+        loss, preds, y = self._step(batch)
+        self.train_accuracy(preds, y); self.train_f1(preds, y); self.train_precision(preds, y); self.train_recall(preds, y)
+        self.log_dict({'train_loss': loss, 'train_accuracy': self.train_accuracy}, prog_bar=True, on_step=False, on_epoch=True)
+        return loss
+
+    def validation_step(self, batch, _):
+        loss, preds, y = self._step(batch)
+        self.val_accuracy(preds, y); self.val_f1(preds, y); self.val_precision(preds, y); self.val_recall(preds, y)
+        self.log_dict({'val_loss': loss, 'val_accuracy': self.val_accuracy}, prog_bar=True, on_step=False, on_epoch=True)
+
+    def test_step(self, batch, _):
+        loss, preds, y = self._step(batch)
+        self.test_accuracy(preds, y); self.test_f1(preds, y); self.test_precision(preds, y); self.test_recall(preds, y)
+        self.test_confusion_matrix.update(preds, y)
+        self.log("test_loss", loss, prog_bar=True, on_epoch=True)
+        self.log("test_accuracy", self.test_accuracy.compute(), prog_bar=True)
+        self.log("test_f1", self.test_f1.compute(), prog_bar=True)
+        self.log("test_precision", self.test_precision.compute(), prog_bar=True)
+        self.log("test_recall", self.test_recall.compute(), prog_bar=True)
+        return {"test_loss": loss}
+
+    def on_test_epoch_end(self):
+        _ = self.test_confusion_matrix.compute()
+        self.test_confusion_matrix.reset()
+        self.train_accuracy.reset(); self.val_accuracy.reset(); self.test_accuracy.reset()
+        self.train_f1.reset(); self.val_f1.reset(); self.test_f1.reset()
+        self.train_precision.reset(); self.val_precision.reset(); self.test_precision.reset()
+        self.train_recall.reset(); self.val_recall.reset(); self.test_recall.reset()
+
+    def configure_optimizers(self):
+        opt = torch.optim.AdamW(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay, betas=self.optimizer_momentum)
+        sch = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=self.epochs)
+        return {"optimizer": opt, "lr_scheduler": sch}

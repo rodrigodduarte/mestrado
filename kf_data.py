@@ -284,3 +284,89 @@ class CustomImageModule_kf_desbalanced(pl.LightningDataModule):
         if self.balance in ("weights", "both") and self.class_weights is not None:
             return self.class_weights if device is None else self.class_weights.to(device)
         return None
+
+
+# kf_data_features_patch.py
+import numpy as np, torch
+import pytorch_lightning as pl
+from torch.utils.data import DataLoader, Subset, WeightedRandomSampler
+from sklearn.model_selection import KFold
+from dataset import FeaturesOnlyFromFoldersDataset  # usa o dataset já existente
+
+class CustomFeaturesFromFoldersModule_kf(pl.LightningDataModule):
+    """
+    DataModule K-Fold para CSVs de features organizados por classe.
+    Assinatura compatível com CustomImageModule_kf (aceita 'shape' mas ignora).
+    Suporta balanceamento: 'none' | 'sampler' | 'weights' | 'both' e expõe get_class_weights().
+    """
+    def __init__(self, train_dir, test_dir, shape, batch_size, num_workers, n_splits=5, fold_idx=0, balance='none'):
+        super().__init__()
+        self.train_dir = train_dir
+        self.test_dir = test_dir
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.n_splits = int(n_splits)
+        self.fold_idx = int(fold_idx)
+        self.balance = balance
+
+        self.kf = KFold(n_splits=self.n_splits, shuffle=True, random_state=42)
+
+        # serão preenchidos no setup
+        self.train_ds = None; self.val_ds = None; self.test_ds = None
+        self.num_classes = None
+        self.class_weights = None
+        self._train_sample_weights = None
+
+    def setup(self, stage=None):
+        if stage == 'fit' or stage is None:
+            full = FeaturesOnlyFromFoldersDataset(self.train_dir)
+            self.num_classes = len(set(full.labels))
+
+            indices = list(range(len(full)))
+            splits = list(self.kf.split(indices))
+            if self.fold_idx >= len(splits):
+                raise ValueError(f"fold_idx {self.fold_idx} inválido; total={len(splits)}")
+
+            train_idx, val_idx = splits[self.fold_idx]
+            self.train_ds = Subset(full, train_idx)
+            self.val_ds = Subset(full, val_idx)
+
+            # balanceamento (contagens por classe no treino)
+            train_labels = np.array([full.labels[i] for i in train_idx], dtype=np.int64)
+            counts = np.bincount(train_labels, minlength=self.num_classes).astype(np.float64)
+            total = counts.sum()
+            eps = 1e-12
+            class_w = (total / (self.num_classes * (counts + eps)))
+            self.class_weights = torch.tensor(class_w, dtype=torch.float32)
+
+            if self.balance in ('sampler', 'both'):
+                self._train_sample_weights = torch.tensor(class_w[train_labels], dtype=torch.double)
+
+        if stage == 'test' or stage is None:
+            self.test_ds = FeaturesOnlyFromFoldersDataset(self.test_dir)
+            if self.num_classes is None:
+                self.num_classes = len(set(self.test_ds.labels))
+
+    def train_dataloader(self):
+        if self.balance in ('sampler', 'both') and self._train_sample_weights is not None:
+            sampler = WeightedRandomSampler(weights=self._train_sample_weights,
+                                            num_samples=len(self._train_sample_weights),
+                                            replacement=True)
+            return DataLoader(self.train_ds, batch_size=self.batch_size, num_workers=self.num_workers,
+                              shuffle=False, sampler=sampler, pin_memory=True)
+        return DataLoader(self.train_ds, batch_size=self.batch_size, num_workers=self.num_workers,
+                          shuffle=True, pin_memory=True)
+
+    def val_dataloader(self):
+        return DataLoader(self.val_ds, batch_size=self.batch_size, num_workers=self.num_workers,
+                          shuffle=False, pin_memory=True)
+
+    def test_dataloader(self):
+        return DataLoader(self.test_ds, batch_size=self.batch_size, num_workers=self.num_workers,
+                          shuffle=False, pin_memory=True)
+
+    # Integração com train_kf_db.py
+    def get_class_weights(self, device=None):
+        if self.balance in ('weights', 'both') and self.class_weights is not None:
+            return self.class_weights if device is None else self.class_weights.to(device)
+        return None
