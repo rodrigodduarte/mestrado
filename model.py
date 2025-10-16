@@ -1116,23 +1116,12 @@ class CustomModelTriple_MLP2(pl.LightningModule):
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
 
-import torch
-from torch import nn
-import torch.nn.functional as F
-import torch.optim as optim
-from torch.optim.lr_scheduler import CosineAnnealingLR
-import pytorch_lightning as pl
-from torchvision import models
-from torchvision.models.convnext import ConvNeXt_Tiny_Weights
-from torchvision.models.swin_transformer import swin_t, Swin_T_Weights
-from torchmetrics.classification import Accuracy, F1Score, Precision, Recall, MulticlassConfusionMatrix
-
-class CustomEnsembleModelWeighted(pl.LightningModule):
-    def __init__(self, tmodel, name_dataset, shape, epochs, learning_rate, features_dim,
+class CustomModel_desbalanced(pl.LightningModule):
+    def __init__(self, tmodel, name_dataset, shape, epochs, learning_rate,
                  drop_path_rate, num_classes, label_smoothing, optimizer_momentum,
-                 weight_decay, layer_scale):
+                 weight_decay, layer_scale, class_weights: torch.Tensor | None = None):
         
-        super(CustomEnsembleModelWeighted, self).__init__()
+        super(CustomModel, self).__init__()
 
         self.save_hyperparameters(ignore=["method", "metric.goal", "metric.name","parameters.batch_size",
                                           "parameters.layer_scale", "parameters.learning_rate.distribution",
@@ -1143,154 +1132,170 @@ class CustomEnsembleModelWeighted(pl.LightningModule):
         self.shape = shape
         self.epochs = epochs
         self.learning_rate = learning_rate
-        self.features_dim = features_dim
         self.drop_path_rate = drop_path_rate
         self.num_classes = num_classes
         self.label_smoothing = label_smoothing
         self.optimizer_momentum = optimizer_momentum
         self.weight_decay= weight_decay
         self.layer_scale = layer_scale
-        self.class_weights = None
-        self.fn_loss = nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)
-        
+
+        # (novo) pesos por classe opcionais, registrados como buffer para mover com .to(device)
+        if class_weights is not None:
+            class_weights = class_weights.float()
+        self.register_buffer("class_weights", class_weights if class_weights is not None else None)
+        self._rebuild_loss()
+
         self.model_dim = 0
         self.validation_step_outputs = []
         
-        self.train_f1 = F1Score(task="multiclass", num_classes=num_classes, average="macro")
-        self.val_f1   = F1Score(task="multiclass", num_classes=num_classes, average="macro")
-        self.test_f1  = F1Score(task="multiclass", num_classes=num_classes, average="macro")
+        # Métricas
+        self.train_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
+        self.val_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
+        self.test_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
+
+        self.train_f1 = F1Score(task="multiclass", num_classes=num_classes)
+        self.val_f1 = F1Score(task="multiclass", num_classes=num_classes)       
+        self.test_f1 = F1Score(task="multiclass", num_classes=num_classes) 
         
-        self.train_precision = Precision(task="multiclass", num_classes=num_classes, average="macro")
-        self.val_precision   = Precision(task="multiclass", num_classes=num_classes, average="macro")
-        self.test_precision  = Precision(task="multiclass", num_classes=num_classes, average="macro")
+        self.train_precision = Precision(task="multiclass", num_classes=num_classes)
+        self.val_precision = Precision(task="multiclass", num_classes=num_classes)
+        self.test_precision = Precision(task="multiclass", num_classes=num_classes)
         
-        self.train_recall = Recall(task="multiclass", num_classes=num_classes, average="macro")
-        self.val_recall   = Recall(task="multiclass", num_classes=num_classes, average="macro")
-        self.test_recall  = Recall(task="multiclass", num_classes=num_classes, average="macro")
-        
+        self.train_recall = Recall(task="multiclass", num_classes=num_classes)
+        self.val_recall = Recall(task="multiclass", num_classes=num_classes)
+        self.test_recall = Recall(task="multiclass", num_classes=num_classes)
+
         self.test_confusion_matrix = MulticlassConfusionMatrix(num_classes=num_classes)
 
+        # Escolha do modelo
+        if tmodel == "convnext_t":
+            self.model_dim = 768
+            self.dl_model = models.convnext_tiny(weights=ConvNeXt_Tiny_Weights.DEFAULT, 
+                                            drop_path_rate=self.drop_path_rate)
+            self.sequential_layers = nn.Sequential(
+                nn.Flatten(start_dim=1),
+                nn.LayerNorm(self.model_dim, eps=1e-6, elementwise_affine=True),
+            )
+            self.dl_model.classifier = self.sequential_layers
 
+        if tmodel == "swint_t":
+            self.model_dim = 768
+            self.dl_model = swin_t(weights=Swin_T_Weights.DEFAULT)
+            self.sequential_layers = nn.Sequential(
+                nn.Flatten(start_dim=1),
+                nn.LayerNorm(self.model_dim, eps=1e-6, elementwise_affine=True),
+                )
+            self.dl_model.head = self.sequential_layers
 
-        # self.dl_model = models.convnext_tiny(weights=ConvNeXt_Tiny_Weights.DEFAULT, 
-        #           
-    # ======= Added: class weights support for imbalanced data =======
-    def set_class_weights(self, weights: torch.Tensor):
-        """
-        Define pesos de classe a serem usados na CrossEntropyLoss.
-        Chame antes de trainer.fit(...).
-        """
-        self.class_weights = weights
+        # Modelo de combinação ajustado
+        adjusted_dim = self.model_dim
+        scaled_dim = int(adjusted_dim * self.layer_scale)
 
-    def on_fit_start(self):
-        super().on_fit_start()
+        self.model = nn.Sequential(
+            nn.Linear(adjusted_dim, scaled_dim),
+            nn.GELU(approximate='none'),
+            nn.LayerNorm(scaled_dim),
+            nn.Dropout(p=0.3),
+            nn.Linear(scaled_dim, self.num_classes)
+        )
+
+    # (novo) permite atualizar pesos por classe depois que o datamodule estiver pronto
+    def set_class_weights(self, class_weights: torch.Tensor | None):
+        if class_weights is not None:
+            class_weights = class_weights.float().to(self.device)
+            self.class_weights = class_weights  # buffer já existente
+        else:
+            self.class_weights = None
+        self._rebuild_loss()
+
+    def _rebuild_loss(self):
         if self.class_weights is not None:
-            try:
-                w = self.class_weights.to(self.device, dtype=torch.float32)
-                self.fn_loss = nn.CrossEntropyLoss(weight=w, label_smoothing=self.label_smoothing)
-                self.print("🔧 [imbalance] class_weights aplicados na loss (CustomEnsembleModelWeighted).")
-            except Exception as e:
-                self.print(f"⚠️ [imbalance] não foi possível aplicar class_weights: {e}")
-
-    def forward(self, x, features):
-        x_conv = self.convnext_model(x)
-        x_swin = self.swint_model(x)
-        x_img = torch.cat((x_conv, x_swin), dim=1)
-
-        x = torch.cat((x_img, features), dim=1)
-        x = self.ensemble_model(x)
+            self.fn_loss = nn.CrossEntropyLoss(weight=self.class_weights, label_smoothing=self.label_smoothing)
+        else:
+            self.fn_loss = nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)
+        
+    def forward(self, x):
+        x = self.dl_model(x)
+        x = self.model(x)
         return x
 
-    def configure_optimizers(self):
-        optimizer = optim.AdamW(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay, betas=self.optimizer_momentum)
-        scheduler = CosineAnnealingLR(optimizer, T_max=self.epochs, eta_min=1e-6)
-        return [optimizer], [scheduler]
-
     def training_step(self, batch, batch_idx):
-        images, features, labels = batch
-        logits = self.forward(images, features)
-        loss = self.fn_loss(logits, labels)
-        preds = torch.argmax(logits, 1)
-        
-        self.train_accuracy.update(preds, labels)
-        self.train_f1.update(preds, labels)
-        self.train_precision.update(preds, labels)
-        self.train_recall.update(preds, labels)
-
-        self.log("train_loss", loss, prog_bar=True, on_step=True, on_epoch=True, batch_size=images.size(0))
-        return loss
-
-    def on_train_epoch_end(self):
-        acc = self.train_accuracy.compute()
-        f1 = self.train_f1.compute()
-        prec = self.train_precision.compute()
-        rec = self.train_recall.compute()
-        self.log("train_acc_epoch", acc, prog_bar=True)
-        self.log("train_f1_epoch", f1, prog_bar=True)
-        self.log("train_prec_epoch", prec, prog_bar=False)
-        self.log("train_rec_epoch", rec, prog_bar=False)
-        self.train_accuracy.reset()
-        self.train_f1.reset()
-        self.train_precision.reset()
-        self.train_recall.reset()
-
+        images, labels, logits, loss, preds = self._commom_step(batch, batch_idx)
+        self.train_accuracy(preds, labels)
+        self.log('train_loss', loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log('train_accuracy', self.train_accuracy, prog_bar=True, on_step=False, on_epoch=True)
+        return {'loss': loss}
+    
     def validation_step(self, batch, batch_idx):
-        images, features, labels = batch
-        logits = self.forward(images, features)
-        loss = self.fn_loss(logits, labels)
-        preds = torch.argmax(logits, 1)
-
-        self.val_accuracy.update(preds, labels)
-        self.val_f1.update(preds, labels)
-        self.val_precision.update(preds, labels)
-        self.val_recall.update(preds, labels)
-
-        self.log("val_loss", loss, prog_bar=True, on_step=False, on_epoch=True, batch_size=images.size(0))
-        return {"val_loss": loss}
-
-    def on_validation_epoch_end(self):
-        acc = self.val_accuracy.compute()
-        f1 = self.val_f1.compute()
-        prec = self.val_precision.compute()
-        rec = self.val_recall.compute()
-        self.log("val_acc_epoch", acc, prog_bar=True)
-        self.log("val_f1_epoch", f1, prog_bar=True)
-        self.log("val_prec_epoch", prec, prog_bar=False)
-        self.log("val_rec_epoch", rec, prog_bar=False)
-        self.val_accuracy.reset()
-        self.val_f1.reset()
-        self.val_precision.reset()
-        self.val_recall.reset()
+        images, labels, logits, loss, preds = self._commom_step(batch, batch_idx)
+        self.val_accuracy(preds, labels)
+        self.log('val_loss', loss, prog_bar=True, on_epoch=True)
+        self.log('val_accuracy', self.val_accuracy, prog_bar=True, on_epoch=True)
+        return {'val_loss': loss}
 
     def test_step(self, batch, batch_idx):
-        images, features, labels = batch
-        logits = self.forward(images, features)
-        loss = self.fn_loss(logits, labels)
-        preds = torch.argmax(logits, 1)
+        images, labels, logits, loss, preds = self._commom_step(batch, batch_idx)
 
-        self.test_accuracy.update(preds, labels)
-        self.test_f1.update(preds, labels)
-        self.test_precision.update(preds, labels)
-        self.test_recall.update(preds, labels)
-        self.test_confusion_matrix.update(preds, labels)
+        # Atualiza as métricas corretamente
+        self.test_accuracy(preds, labels)
+        self.test_f1(preds, labels)
+        self.test_precision(preds, labels)
+        self.test_recall(preds, labels)
+        self.test_confusion_matrix.update(preds, labels)  # (novo) acumula matriz
 
-        self.log("test_loss", loss, prog_bar=True, on_step=False, on_epoch=True, batch_size=images.size(0))
-        return {"test_loss": loss}
+        # Loga as métricas corretamente
+        self.log("test_loss", loss, prog_bar=True, on_epoch=True)
+        self.log("test_accuracy", self.test_accuracy.compute(), prog_bar=True)
+        self.log("test_f1", self.test_f1.compute(), prog_bar=True)
+        self.log("test_precision", self.test_precision.compute(), prog_bar=True)
+        self.log("test_recall", self.test_recall.compute(), prog_bar=True)
 
+        return {
+            "test_loss": loss,
+            "test_accuracy": self.test_accuracy.compute(),
+            "test_f1": self.test_f1.compute(),
+            "test_precision": self.test_precision.compute(),
+            "test_recall": self.test_recall.compute()        
+            }
+    
     def on_test_epoch_end(self):
-        acc = self.test_accuracy.compute()
-        f1 = self.test_f1.compute()
-        prec = self.test_precision.compute()
-        rec = self.test_recall.compute()
-        cm = self.test_confusion_matrix.compute()
-
-        self.log("test_acc_epoch", acc, prog_bar=True)
-        self.log("test_f1_epoch", f1, prog_bar=True)
-        self.log("test_prec_epoch", prec, prog_bar=False)
-        self.log("test_rec_epoch", rec, prog_bar=False)
-        # Se você já salva a CM em callbacks, manter como está; aqui apenas reseta:
         self.test_accuracy.reset()
         self.test_f1.reset()
         self.test_precision.reset()
         self.test_recall.reset()
+
+        conf_matrix_value = self.test_confusion_matrix.compute().cpu().numpy()
         self.test_confusion_matrix.reset()
+        print("Matriz de Confusão calculada após o teste.")
+        return conf_matrix_value
+
+    def on_validation_epoch_end(self):
+        avg_loss = torch.mean(torch.tensor(self.validation_step_outputs)) if len(self.validation_step_outputs) > 0 else torch.tensor(float('nan'))
+        self.log('avg_val_loss', avg_loss)
+        self.validation_step_outputs.clear()
+        
+    def _commom_step(self, batch, batch_idx):
+        images, labels = batch
+        logits = self.forward(images)
+        loss = self.fn_loss(logits, labels)
+        preds = torch.argmax(logits, 1)
+        return images, labels, logits, loss, preds
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(
+            self.parameters(), 
+            lr=self.learning_rate, 
+            betas = self.optimizer_momentum,
+            weight_decay=self.weight_decay)
+
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.epochs)
+
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': {
+                'scheduler': scheduler,
+                'interval': 'epoch',
+                'monitor': 'val_loss',
+                'frequency': 1,
+            }
+        }
