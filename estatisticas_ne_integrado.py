@@ -1,33 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-estatisticas_ne_integrado.py — usa config.py para descobrir o dataset e agrega resultados (seed/fold).
-
-Principais recursos:
-- Lê o arquivo de config (Python) via runpy e extrai TRAIN_DIR → deduz o nome do dataset.
-- Descobre a pasta "modelos_kf" a partir do diretório do config ou do CWD (subindo e/ou varredura recursiva).
-- Encontra TODOS os runs em modelos_kf cujo nome começa com "<dataset>_" e que contenham "seed_*".
-- Para cada run encontrado, gera <dataset>_<tmodel>_resultados.txt com estatísticas completas:
-  * Por fold: média e DP entre seeds (acc, prec, rec, f1, loss) + tempos.
-  * Resumo entre folds: média/DP/SE/IC95.
-  * Por seed: média/DP via folds + melhor seed por acc.
-  * Bloco final JSON_SUMMARY para parsing programático.
-- Robusto a variações de chave nas métricas dentro de test_metrics_json.
-- Aceita override de --run_dir se quiser processar só um run específico.
-
-Uso:
-  python estatisticas_ne_integrado.py --config /caminho/para/config.py
-  # ou:
-  python estatisticas_ne_integrado.py  (ele tentará achar um config.py próximo)
-"""
-
 from __future__ import annotations
 import argparse, json, math, re, runpy, sys
 from pathlib import Path
 from statistics import mean, pstdev
 from typing import Dict, Any, List, Tuple, Optional
 
-# ------------------------- Utilidades -------------------------
+# ------------------------- Parsing helpers -------------------------
+
+def _safe_float(x: str) -> Optional[float]:
+    try:
+        return float(x.replace(",", ".").strip())
+    except Exception:
+        return None
 
 def _safe_load_json(s: str) -> Optional[dict]:
     try:
@@ -45,7 +30,7 @@ def _first_key(d: Dict[str, Any], patterns: List[str]) -> Optional[str]:
                 return k
     return None
 
-def _extract_metrics(test_dict: Dict[str, Any]) -> Dict[str, float]:
+def _extract_metrics_from_json(test_dict: Dict[str, Any]) -> Dict[str, float]:
     patterns = {
         "acc":   [r"\bacc\b", r"accuracy"],
         "prec":  [r"\bprec", r"precision"],
@@ -59,9 +44,38 @@ def _extract_metrics(test_dict: Dict[str, Any]) -> Dict[str, float]:
             k = _first_key(test_dict, pats)
             if k is not None:
                 try:
-                    out[name] = float(test_dict[k])
+                    out[name] = float(str(test_dict[k]).replace(",", "."))
                 except Exception:
                     pass
+    return out
+
+# NEW: robust text-mode parser (Portuguese/English labels; single-line or multi-line)
+_METRIC_PATTERNS = [
+    ("acc",  r"(?:\bAcurac[ií]a\b|\bAccuracy\b)\s*:\s*([0-9]+[.,][0-9]+|\d+)"),
+    ("prec", r"(?:\bPrecis[aã]o\b|\bPrecision\b)\s*:\s*([0-9]+[.,][0-9]+|\d+)"),
+    ("rec",  r"(?:\bRecall\b)\s*:\s*([0-9]+[.,][0-9]+|\d+)"),
+    ("f1",   r"(?:\bF1(?:-?\s*score)?\b)\s*:\s*([0-9]+[.,][0-9]+|\d+)"),
+    ("loss", r"(?:\bTest\s*Loss\b|\bLoss\b)\s*:\s*([0-9]+[.,][0-9]+|\d+)"),
+]
+
+def _extract_metrics_from_text(lines: List[str]) -> Dict[str, float]:
+    text = " | ".join(lines)
+    out: Dict[str, float] = {}
+    for key, rx in _METRIC_PATTERNS:
+        m = re.search(rx, text, flags=re.IGNORECASE)
+        if m:
+            val = _safe_float(m.group(1))
+            if val is not None:
+                out[key] = val
+    # Se não achou nada no "texto combinado", tente linha a linha (mais rigoroso)
+    if not out:
+        for ln in lines:
+            for key, rx in _METRIC_PATTERNS:
+                m = re.search(rx, ln, flags=re.IGNORECASE)
+                if m and key not in out:
+                    val = _safe_float(m.group(1))
+                    if val is not None:
+                        out[key] = val
     return out
 
 def _extract_times(lines: List[str]) -> Dict[str, float]:
@@ -72,6 +86,7 @@ def _extract_times(lines: List[str]) -> Dict[str, float]:
         k, v = ln.split(":", 1)
         k = k.strip().lower()
         v = v.strip()
+        # nomes canônicos
         for name, keypat in [
             ("train_time_sec", r"^train_time_sec$"),
             ("test_time_sec", r"^test_time_sec$"),
@@ -79,10 +94,20 @@ def _extract_times(lines: List[str]) -> Dict[str, float]:
             ("throughput",    r"^throughput_samples_per_sec$"),
         ]:
             if re.match(keypat, k):
-                try:
-                    kv[name] = float(v)
-                except Exception:
-                    pass
+                val = _safe_float(v)
+                if val is not None:
+                    kv[name] = val
+        # fallbacks comuns em PT
+        for name, keypat in [
+            ("train_time_sec", r"^tempo[_ ]?treino"),
+            ("test_time_sec", r"^tempo[_ ]?teste"),
+            ("ms_per_sample", r"(?:ms[_ ]?por[_ ]?amostra|lat[eê]ncia[_ ]?m[eé]dia)"),
+            ("throughput",    r"(?:amostras[/ ]?s|throughput)"),
+        ]:
+            if name not in kv and re.search(keypat, k, flags=re.IGNORECASE):
+                val = _safe_float(v)
+                if val is not None:
+                    kv[name] = val
     return kv
 
 def _read_resultados_fold(txt_path: Path) -> Tuple[Optional[Dict[str,float]], Optional[Dict[str,float]]]:
@@ -90,7 +115,8 @@ def _read_resultados_fold(txt_path: Path) -> Tuple[Optional[Dict[str,float]], Op
         s = txt_path.read_text(encoding="utf-8", errors="ignore")
     except Exception:
         return None, None
-    lines = [ln.strip() for ln in s.splitlines()]
+    lines = [ln.strip() for ln in s.splitlines() if ln.strip()]
+    # 1) tentar JSON
     test_json = None
     for ln in lines:
         if ln.lower().startswith("test_metrics_json:"):
@@ -98,9 +124,16 @@ def _read_resultados_fold(txt_path: Path) -> Tuple[Optional[Dict[str,float]], Op
             test_json = _safe_load_json(js.strip())
             if test_json:
                 break
-    metrics = _extract_metrics(test_json or {})
+    metrics = _extract_metrics_from_json(test_json or {})
+    # 2) fallback: texto
+    if not metrics:
+        metrics = _extract_metrics_from_text(lines)
     times = _extract_times(lines)
-    return (metrics or None, times or None)
+    if not metrics:
+        return None, times or None
+    return metrics, times or None
+
+# ------------------------- Stats helpers -------------------------
 
 def _stderr(sd: float, n: int) -> float:
     if n <= 0 or math.isnan(sd):
@@ -125,11 +158,9 @@ def _agg_mean_std(arr: List[float]) -> Tuple[float,float]:
         return arr[0], 0.0
     return mean(arr), pstdev(arr)
 
-# ------------------------- Descoberta baseada no config -------------------------
+# ------------------------- Config / discovery -------------------------
 
 def _load_config_dict(cfg_path: Optional[Path]) -> Tuple[Optional[dict], Optional[Path]]:
-    """Carrega config.py via runpy. Retorna (dict, base_dir_do_config_ou_None)."""
-    search_roots = []
     if cfg_path:
         p = Path(cfg_path).resolve()
         if p.is_file():
@@ -138,7 +169,6 @@ def _load_config_dict(cfg_path: Optional[Path]) -> Tuple[Optional[dict], Optiona
                 return d, p.parent
             except Exception:
                 pass
-        # se apontou para diretório, tente achar config.py dentro
         if p.is_dir():
             cand = p / "config.py"
             if cand.exists():
@@ -147,7 +177,7 @@ def _load_config_dict(cfg_path: Optional[Path]) -> Tuple[Optional[dict], Optiona
                     return d, p
                 except Exception:
                     pass
-    # tentar localizar config.py subindo desde CWD
+    # subir procurando config.py
     cur = Path.cwd().resolve()
     for _ in range(8):
         cand = cur / "config.py"
@@ -160,8 +190,7 @@ def _load_config_dict(cfg_path: Optional[Path]) -> Tuple[Optional[dict], Optiona
         if cur.parent == cur:
             break
         cur = cur.parent
-
-    # busca recursiva superficial a partir do CWD
+    # busca recursiva
     for cand in Path.cwd().resolve().rglob("config.py"):
         try:
             d = runpy.run_path(str(cand))
@@ -175,19 +204,15 @@ def _dataset_from_config(cfg: dict) -> Optional[str]:
     if not td:
         return None
     p = Path(td)
-    # se termina com /train, dataset é o pai
     if p.name.lower() == "train":
         return p.parent.name
-    # caso contrário, use o último nome
     return p.name
 
 def _find_modelos_kf(start_dirs: List[Path]) -> Optional[Path]:
-    # tentar direto
     for base in start_dirs + [Path.cwd().resolve()]:
         cand = base / "modelos_kf"
         if cand.is_dir():
             return cand
-        # subir alguns níveis
         cur = base
         for _ in range(6):
             cand = cur / "modelos_kf"
@@ -196,24 +221,20 @@ def _find_modelos_kf(start_dirs: List[Path]) -> Optional[Path]:
             if cur.parent == cur:
                 break
             cur = cur.parent
-    # varredura recursiva limitada
     for base in start_dirs + [Path.cwd().resolve()]:
         hits = list(base.rglob("modelos_kf"))
         if hits:
             return hits[0]
-    # fallback: busca global a partir do CWD
     for cand in Path.cwd().resolve().rglob("modelos_kf"):
         return cand
     return None
 
 def _list_runs_for_dataset(mkf: Path, dataset: str) -> List[Path]:
     runs = []
-    # diretos: modelos_kf/<dataset>_*
     for d in mkf.iterdir():
         if d.is_dir() and d.name.startswith(f"{dataset}_"):
             if any((d / s).is_dir() for s in d.glob("seed_*")):
                 runs.append(d)
-    # se nada achou, varrer recursivo (caso de estrutura aninhada)
     if not runs:
         for d in mkf.rglob(f"{dataset}_*"):
             if d.is_dir() and any((d / s).is_dir() for s in d.glob("seed_*")):
@@ -227,7 +248,7 @@ def _name_from_run_dir(run_dir: Path) -> Tuple[str, str]:
     parts = name.split("_", 1)
     return parts[0], parts[1]
 
-# ------------------------- Coleta e Agregação -------------------------
+# ------------------------- Core aggregation -------------------------
 
 def _collect_all(run_dir: Path):
     metrics_by_fold: Dict[int, List[Dict[str,float]]] = {}
@@ -263,13 +284,34 @@ def _collect_all(run_dir: Path):
                 missing.append(f"{sd.name}/{fold_dir.name}/(métricas ausentes)")
             if times:
                 times_by_fold.setdefault(fold_idx, []).append(times)
-            else:
-                missing.append(f"{sd.name}/{fold_dir.name}/(tempos ausentes)")
 
     if not metrics_by_fold:
         raise RuntimeError("Não foi possível extrair métricas de nenhum resultados_fold.txt")
 
     return metrics_by_fold, times_by_fold, seeds_found, missing
+
+def _stderr(sd: float, n: int) -> float:
+    if n <= 0 or math.isnan(sd):
+        return float("nan")
+    return sd / math.sqrt(n)
+
+def _ci95(mean_val: float, sd: float, n: int) -> Tuple[float,float]:
+    if n <= 0 or math.isnan(sd) or math.isnan(mean_val):
+        return (float("nan"), float("nan"))
+    half = 1.96 * sd / math.sqrt(n)
+    return (mean_val - half, mean_val + half)
+
+def _format(x: float, nd: int = 6) -> str:
+    if x is None or (isinstance(x, float) and (math.isnan(x) or math.isinf(x))):
+        return "nan"
+    return f"{x:.{nd}f}"
+
+def _agg_mean_std(arr: List[float]) -> Tuple[float,float]:
+    if not arr:
+        return float("nan"), float("nan")
+    if len(arr) == 1:
+        return arr[0], 0.0
+    return mean(arr), pstdev(arr)
 
 def _write_report_for_run(run_dir: Path) -> Path:
     dataset, tmodel = _name_from_run_dir(run_dir)
@@ -278,7 +320,6 @@ def _write_report_for_run(run_dir: Path) -> Path:
     metrics_by_fold, times_by_fold, seeds_found, missing = _collect_all(run_dir)
     folds_sorted = sorted(metrics_by_fold.keys())
 
-    # Por fold: mean/std entre seeds
     per_fold_stats = {}
     for fidx in folds_sorted:
         arr = metrics_by_fold[fidx]
@@ -295,7 +336,6 @@ def _write_report_for_run(run_dir: Path) -> Path:
             "loss": {"mean": mean(losses) if losses else float("nan"), "std": pstdev(losses) if len(losses)> 1 else 0.0, "n": len(losses)},
         }
 
-    # Entre folds: mean/std/se/ci95
     def _collect_fold_means(metric):
         return [per_fold_stats[f][metric]["mean"] for f in folds_sorted
                 if not math.isnan(per_fold_stats[f][metric]["mean"])]
@@ -307,7 +347,6 @@ def _write_report_for_run(run_dir: Path) -> Path:
         lo, hi = _ci95(m_mean, m_sd, len(vals))
         summary[m] = {"mean": m_mean, "std": m_sd, "se": se, "ci95": (lo, hi), "n_folds": len(vals)}
 
-    # Tempos
     per_fold_time = {}
     for fidx, arr in sorted(times_by_fold.items()):
         for key in ["train_time_sec","test_time_sec","ms_per_sample","throughput"]:
@@ -326,7 +365,7 @@ def _write_report_for_run(run_dir: Path) -> Path:
             lo, hi = _ci95(m_mean, m_sd, len(fold_means))
             time_summary[key] = {"mean": m_mean, "std": m_sd, "se": se, "ci95": (lo,hi), "n_folds": len(fold_means)}
 
-    # Por seed: agregação sobre folds
+    # Seed-level (across folds)
     seed_fold_metrics: Dict[str, Dict[str, List[float]]] = {}
     for sd in sorted([d for d in run_dir.glob("seed_*") if d.is_dir()],
                      key=lambda p: (len(p.name), p.name)):
@@ -351,7 +390,7 @@ def _write_report_for_run(run_dir: Path) -> Path:
         if not math.isnan(acc_m) and acc_m > best_acc:
             best_acc, best_seed = acc_m, seed_name
 
-    # Hiperparâmetros (opcional)
+    # Hyperparams (optional)
     hparams = None
     hp_path = run_dir / "hyperparams_used.json"
     if hp_path.exists():
@@ -360,7 +399,6 @@ def _write_report_for_run(run_dir: Path) -> Path:
         except Exception:
             hparams = None
 
-    # Escreve
     with out_path.open("w", encoding="utf-8") as f:
         f.write(f"# Resultados consolidados — {dataset}_{tmodel}\n\n")
         f.write("=== Informações do Experimento ===\n")
@@ -388,7 +426,8 @@ def _write_report_for_run(run_dir: Path) -> Path:
         for fidx in sorted(folds_sorted):
             f.write(f"== Fold {fidx} ==\n")
             stats = per_fold_stats[fidx]
-            for key, label in [("acc","Acurácia"),("prec","Precisão"),("rec","Recall"),("f1","F1-score"),("loss","Test Loss")]:
+            for key, label in [("acc","Acurácia"),("prec","Precisão"),
+                               ("rec","Recall"),("f1","F1-score"),("loss","Test Loss")]:
                 dd = stats[key]
                 f.write(f"{label}: mean={_format(dd['mean'])} std={_format(dd['std'])} n_seeds={dd['n']}\n")
             if fidx in per_fold_time:
@@ -449,16 +488,15 @@ def _write_report_for_run(run_dir: Path) -> Path:
 
     return out_path
 
+# ------------------------- Entry -------------------------
+
 def _main(argv=None):
     ap = argparse.ArgumentParser(description="Extrai estatísticas usando config.py para detectar dataset.")
     ap.add_argument("--config", type=str, default=None, help="Caminho para config.py (opcional).")
     ap.add_argument("--run_dir", type=str, default=None, help="Processar apenas este run (sobrepõe detecção por dataset).")
     args = ap.parse_args(argv)
 
-    cfg, cfg_dir = _load_config_dict(Path(args.config) if args.config else None)
-    dataset = _dataset_from_config(cfg) if cfg else None
-
-    # Se --run_dir foi passado, processa só ele
+    # Tenta usar --run_dir se fornecido; caso contrário, usa config.py
     if args.run_dir:
         run_dir = Path(args.run_dir).resolve()
         if not run_dir.exists():
@@ -467,14 +505,49 @@ def _main(argv=None):
         print(f"✓ Arquivo salvo: {out}")
         return
 
-    # Caso contrário, usamos dataset do config para achar runs
+    cfg, cfg_dir = _load_config_dict(Path(args.config) if args.config else None)
+    dataset = _dataset_from_config(cfg) if cfg else None
     if not dataset:
         raise RuntimeError("Não foi possível obter o dataset a partir do config (precisa de TRAIN_DIR). Passe --run_dir.")
 
     # Descobrir modelos_kf
+    def _find_modelos_kf(start_dirs: List[Path]) -> Optional[Path]:
+        for base in start_dirs + [Path.cwd().resolve()]:
+            cand = base / "modelos_kf"
+            if cand.is_dir():
+                return cand
+            cur = base
+            for _ in range(6):
+                cand = cur / "modelos_kf"
+                if cand.is_dir():
+                    return cand
+                if cur.parent == cur:
+                    break
+                cur = cur.parent
+        for base in start_dirs + [Path.cwd().resolve()]:
+            hits = list(base.rglob("modelos_kf"))
+            if hits:
+                return hits[0]
+        for cand in Path.cwd().resolve().rglob("modelos_kf"):
+            return cand
+        return None
+
     mkf = _find_modelos_kf([d for d in [cfg_dir] if d] or [])
     if not mkf:
         raise FileNotFoundError("Não encontrei a pasta 'modelos_kf' próximo ao config nem no CWD. Passe --run_dir.")
+
+    # Listar runs do dataset
+    def _list_runs_for_dataset(mkf: Path, dataset: str) -> List[Path]:
+        runs = []
+        for d in mkf.iterdir():
+            if d.is_dir() and d.name.startswith(f"{dataset}_"):
+                if any((d / s).is_dir() for s in d.glob("seed_*")):
+                    runs.append(d)
+        if not runs:
+            for d in mkf.rglob(f"{dataset}_*"):
+                if d.is_dir() and any((d / s).is_dir() for s in d.glob("seed_*")):
+                    runs.append(d)
+        return sorted(set(runs), key=lambda p: p.name)
 
     runs = _list_runs_for_dataset(mkf, dataset)
     if not runs:
