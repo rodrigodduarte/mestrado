@@ -130,7 +130,7 @@ def train_model():
     with open(os.path.join(run_dir, "hyperparams_used.json"), "w") as f:
         json.dump(h, f, indent=2, ensure_ascii=False)
 
-    for seed in range(42, 42 + n_seeds):
+    for seed in range(46, 46+1):
         print(f"\n==================== Treinando com SEED {seed} ====================")
         set_random_seeds(seed)
 
