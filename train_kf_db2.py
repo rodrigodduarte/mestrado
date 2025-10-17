@@ -17,8 +17,8 @@ from pytorch_lightning.callbacks import TQDMProgressBar, ModelCheckpoint
 # Use as classes que você já tem nos arquivos novos:
 #   - CustomFeaturesOnlyModel.py
 #   - CustomFeaturesFromFoldersModule.py   (versão K-Fold)
-from CustomFeaturesOnlyModel import CustomFeaturesOnlyModel
-from CustomFeaturesFromFoldersModule import CustomFeaturesFromFoldersModule_kf
+from model import CustomFeaturesOnlyModel
+from dataset import CustomFeaturesFromFoldersModule_kf
 
 
 # ============================ Utils ============================

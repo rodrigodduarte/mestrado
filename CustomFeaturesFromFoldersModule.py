@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import DataLoader, random_split, Dataset, ConcatDataset, Subset
+from torch.utils.data import DataLoader, random_split, Dataset, ConcatDataset, Subset, WeightedRandomSampler
 import pandas as pd
 import numpy as np
 from PIL import Image
@@ -84,77 +84,63 @@ class FeaturesOnlyFromFoldersDataset(Dataset):
         return features, label
 
 
-class CustomFeaturesFromFoldersModule(pl.LightningDataModule):
-    """
-    DataModule para o conjunto de vetores de características organizados por classe em subpastas.
-
-    Estrutura esperada:
-    ├── train_dir/
-    │   ├── classe_1/
-    │   │   ├── amostra_1.csv
-    │   │   ├── amostra_2.csv
-    │   └── ...
-    ├── test_dir/
-    │   ├── classe_1/
-    │   │   ├── amostra_X.csv
-    │   └── ...
-    """
-
-    def __init__(self, train_dir, test_dir, batch_size, num_workers, val_split=0.2, seed=42):
+class CustomFeaturesFromFoldersModule_kf(pl.LightningDataModule):
+    def __init__(self, train_dir, test_dir, shape, batch_size, num_workers,
+                 n_splits=5, fold_idx=0, balance='none'):
         super().__init__()
-        self.train_dir = train_dir
-        self.test_dir = test_dir
-        self.batch_size = batch_size
-        self.num_workers = num_workers
-        self.val_split = val_split
-        self.seed = seed
+        self.train_dir, self.test_dir = train_dir, test_dir
+        self.batch_size, self.num_workers = batch_size, num_workers
+        self.n_splits, self.fold_idx = int(n_splits), int(fold_idx)
+        self.balance = balance
+        self.kf = KFold(n_splits=self.n_splits, shuffle=True, random_state=42)
+        self.train_ds = self.val_ds = self.test_ds = None
+        self.num_classes = None
+        self.class_weights = None
+        self._train_sample_weights = None
 
     def setup(self, stage=None):
-        """Configura os datasets de treino, validação e teste."""
-        if stage == "fit" or stage is None:
-            # Dataset completo de treino
-            full_dataset = FeaturesOnlyFromFoldersDataset(data_dir=self.train_dir)
+        if stage in ('fit', None):
+            full = FeaturesOnlyFromFoldersDataset(self.train_dir)
+            self.num_classes = len(set(full.labels))
+            idx = np.arange(len(full))
+            splits = list(self.kf.split(idx))
+            tr_idx, va_idx = splits[self.fold_idx]
+            self.train_ds, self.val_ds = Subset(full, tr_idx), Subset(full, va_idx)
 
-            # Divide em treino e validação
-            val_size = int(self.val_split * len(full_dataset))
-            train_size = len(full_dataset) - val_size
+            # pesos por classe (opcional p/ desbalanceamento)
+            train_labels = np.array([full.labels[i] for i in tr_idx], dtype=np.int64)
+            counts = np.bincount(train_labels, minlength=self.num_classes).astype(np.float64)
+            total = counts.sum(); eps = 1e-12
+            cls_w = total / (self.num_classes * (counts + eps))
+            self.class_weights = torch.tensor(cls_w, dtype=torch.float32)
+            if self.balance in ('sampler', 'both'):
+                self._train_sample_weights = torch.tensor(cls_w[train_labels], dtype=torch.double)
 
-            self.train_ds, self.val_ds = random_split(
-                full_dataset,
-                [train_size, val_size],
-                generator=torch.Generator().manual_seed(self.seed)
-            )
-
-        if stage == "test" or stage is None:
-            # Dataset de teste
-            self.test_ds = FeaturesOnlyFromFoldersDataset(data_dir=self.test_dir)
+        if stage in ('test', None):
+            self.test_ds = FeaturesOnlyFromFoldersDataset(self.test_dir)
+            if self.num_classes is None:
+                self.num_classes = len(set(self.test_ds.labels))
 
     def train_dataloader(self):
-        """DataLoader de treino."""
-        return DataLoader(
-            self.train_ds,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            shuffle=True,
-            pin_memory=True
-        )
+        if self.balance in ('sampler', 'both') and self._train_sample_weights is not None:
+            sampler = WeightedRandomSampler(self._train_sample_weights,
+                                            num_samples=len(self._train_sample_weights),
+                                            replacement=True)
+            return DataLoader(self.train_ds, batch_size=self.batch_size,
+                              num_workers=self.num_workers, shuffle=False,
+                              sampler=sampler, pin_memory=True)
+        return DataLoader(self.train_ds, batch_size=self.batch_size,
+                          num_workers=self.num_workers, shuffle=True, pin_memory=True)
 
     def val_dataloader(self):
-        """DataLoader de validação."""
-        return DataLoader(
-            self.val_ds,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            shuffle=False,
-            pin_memory=True
-        )
+        return DataLoader(self.val_ds, batch_size=self.batch_size,
+                          num_workers=self.num_workers, shuffle=False, pin_memory=True)
 
     def test_dataloader(self):
-        """DataLoader de teste."""
-        return DataLoader(
-            self.test_ds,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            shuffle=False,
-            pin_memory=True
-        )
+        return DataLoader(self.test_ds, batch_size=self.batch_size,
+                          num_workers=self.num_workers, shuffle=False, pin_memory=True)
+
+    def get_class_weights(self, device=None):
+        if self.balance in ('weights', 'both') and self.class_weights is not None:
+            return self.class_weights if device is None else self.class_weights.to(device)
+        return None
