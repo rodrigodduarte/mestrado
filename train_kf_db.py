@@ -12,7 +12,7 @@ from pytorch_lightning.callbacks import TQDMProgressBar, ModelCheckpoint
 
 # ====== IMPORTS (ajuste o caminho se necessário) ======
 from model import CustomModel
-from kf_data import CustomImageModule_kf
+from dataset import CustomImageModule_kf
 
 # (se você usa callbacks próprios, mantenha)
 from callbacks import (
@@ -120,7 +120,7 @@ def _build_model(hparams, class_weights):
 
 # ---------------- treino principal ----------------
 def train_model():
-    h = load_hyperparameters('config.yaml')
+    h = load_hyperparameters('config2.yaml')
     k_splits = h['K_FOLDS']
     n_seeds = h.get('N_SEEDS', 1)
 
