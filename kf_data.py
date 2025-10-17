@@ -321,31 +321,33 @@ class CustomFeaturesFromFoldersModule_kf(pl.LightningDataModule):
         if stage == 'fit' or stage is None:
             full = FeaturesOnlyFromFoldersDataset(self.train_dir)
             self.num_classes = len(set(full.labels))
+            # DEBUG: uma amostra
+            x0, y0 = full[0]
+            print("[DM] sample feat shape:", getattr(x0, "shape", None), "dtype:", getattr(x0, "dtype", None), "label:", y0)
 
             indices = list(range(len(full)))
             splits = list(self.kf.split(indices))
-            if self.fold_idx >= len(splits):
-                raise ValueError(f"fold_idx {self.fold_idx} inválido; total={len(splits)}")
-
             train_idx, val_idx = splits[self.fold_idx]
             self.train_ds = Subset(full, train_idx)
             self.val_ds = Subset(full, val_idx)
 
-            # balanceamento (contagens por classe no treino)
             train_labels = np.array([full.labels[i] for i in train_idx], dtype=np.int64)
-            counts = np.bincount(train_labels, minlength=self.num_classes).astype(np.float64)
-            total = counts.sum()
-            eps = 1e-12
+            counts = np.bincount(train_labels, minlength=self.num_classes)
+            print("[DM] num_classes:", self.num_classes, "| train counts:", counts.tolist())
+
+            total = counts.sum(); eps = 1e-12
             class_w = (total / (self.num_classes * (counts + eps)))
             self.class_weights = torch.tensor(class_w, dtype=torch.float32)
-
-            if self.balance in ('sampler', 'both'):
+            if self.balance in ('sampler','both'):
                 self._train_sample_weights = torch.tensor(class_w[train_labels], dtype=torch.double)
+                print("[DM] sampler ON | ex weights:", self._train_sample_weights[:8].tolist())
 
         if stage == 'test' or stage is None:
             self.test_ds = FeaturesOnlyFromFoldersDataset(self.test_dir)
             if self.num_classes is None:
                 self.num_classes = len(set(self.test_ds.labels))
+            print("[DM] test size:", len(self.test_ds))
+
 
     def train_dataloader(self):
         if self.balance in ('sampler', 'both') and self._train_sample_weights is not None:
