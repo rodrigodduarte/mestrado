@@ -1321,6 +1321,7 @@ class CustomFeaturesOnlyModelDropIn(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         
+        self.input_proj = None
 
         self.num_classes = int(num_classes)
         self.features_dim = int(features_dim)
