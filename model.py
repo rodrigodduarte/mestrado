@@ -1320,6 +1320,7 @@ class CustomFeaturesOnlyModelDropIn(pl.LightningModule):
                  weight_decay, layer_scale, features_dim=1296, class_weights=None):
         super().__init__()
         self.save_hyperparameters()
+        
 
         self.num_classes = int(num_classes)
         self.features_dim = 1296
