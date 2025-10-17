@@ -32,18 +32,19 @@ class CustomFeaturesOnlyModel(pl.LightningModule):
     """
 
     def __init__(self,
-                 name_dataset: str,
-                 shape: tuple,
-                 epochs: int,
-                 learning_rate: float,
-                 features_dim: int,
-                 drop_path_rate: float,
-                 num_classes: int,
-                 label_smoothing: float,
-                 optimizer_momentum: tuple,
-                 weight_decay: float,
-                 layer_scale: float,
-                 auto_project: bool = True):
+                 name_dataset,
+                 shape,
+                 epochs,
+                 learning_rate,
+                 features_dim,
+                 drop_path_rate,
+                 num_classes,
+                 label_smoothing,
+                 optimizer_momentum,
+                 weight_decay,
+                 layer_scale,
+                 auto_project: bool = True,
+                 class_weights=None):        # <<< ADICIONE AQUI
         super().__init__()
 
         self.save_hyperparameters(ignore=[
@@ -93,6 +94,18 @@ class CustomFeaturesOnlyModel(pl.LightningModule):
         self.auto_proj = None  # criada sob demanda no primeiro forward, se necessário
 
         self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+
+        cw = None
+        if class_weights is not None:
+            try:
+                cw = torch.as_tensor(class_weights, dtype=torch.float32)
+            except Exception:
+                cw = None
+        self.register_buffer("class_weights", cw if cw is not None else None)
+        self.criterion = nn.CrossEntropyLoss(
+            weight=self.class_weights,
+            label_smoothing=float(label_smoothing)
+        )
 
     # ----------------------- Utils -----------------------
     @staticmethod

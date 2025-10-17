@@ -1301,15 +1301,183 @@ class CustomModel_desbalanced(pl.LightningModule):
         }
 
 
-# model_features_patch.py
-import torch
-from torch import nn
-import torch.nn.functional as F
-import pytorch_lightning as pl
-from torchmetrics import Accuracy, F1Score, Precision, Recall
-from torchmetrics.classification import MulticlassConfusionMatrix
+class CustomModel_vec_desbalanced(pl.LightningModule):
+    def __init__(self,
+                 name_dataset: str,
+                 shape: tuple,
+                 epochs: int,
+                 learning_rate: float,
+                 features_dim: int,
+                 drop_path_rate: float,
+                 num_classes: int,
+                 label_smoothing: float,
+                 optimizer_momentum: tuple,
+                 weight_decay: float,
+                 layer_scale: float,
+                 auto_project: bool = True):
+        super().__init__()
 
-class CustomFeaturesOnlyModelDropIn(pl.LightningModule):
+        # (novo) pesos por classe opcionais, registrados como buffer para mover com .to(device)
+        if class_weights is not None:
+            class_weights = class_weights.float()
+        self.register_buffer("class_weights", class_weights if class_weights is not None else None)
+        self._rebuild_loss()
+
+        self.model_dim = 0
+        self.validation_step_outputs = []
+        
+        # Métricas
+        self.train_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
+        self.val_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
+        self.test_accuracy = Accuracy(task='multiclass', num_classes=num_classes)
+
+        self.train_f1 = F1Score(task="multiclass", num_classes=num_classes)
+        self.val_f1 = F1Score(task="multiclass", num_classes=num_classes)       
+        self.test_f1 = F1Score(task="multiclass", num_classes=num_classes) 
+        
+        self.train_precision = Precision(task="multiclass", num_classes=num_classes)
+        self.val_precision = Precision(task="multiclass", num_classes=num_classes)
+        self.test_precision = Precision(task="multiclass", num_classes=num_classes)
+        
+        self.train_recall = Recall(task="multiclass", num_classes=num_classes)
+        self.val_recall = Recall(task="multiclass", num_classes=num_classes)
+        self.test_recall = Recall(task="multiclass", num_classes=num_classes)
+
+        self.test_confusion_matrix = MulticlassConfusionMatrix(num_classes=num_classes)
+
+        # Escolha do modelo
+        if tmodel == "convnext_t":
+            self.model_dim = 768
+            self.dl_model = models.convnext_tiny(weights=ConvNeXt_Tiny_Weights.DEFAULT, 
+                                            drop_path_rate=self.drop_path_rate)
+            self.sequential_layers = nn.Sequential(
+                nn.Flatten(start_dim=1),
+                nn.LayerNorm(self.model_dim, eps=1e-6, elementwise_affine=True),
+            )
+            self.dl_model.classifier = self.sequential_layers
+
+        if tmodel == "swint_t":
+            self.model_dim = 768
+            self.dl_model = swin_t(weights=Swin_T_Weights.DEFAULT)
+            self.sequential_layers = nn.Sequential(
+                nn.Flatten(start_dim=1),
+                nn.LayerNorm(self.model_dim, eps=1e-6, elementwise_affine=True),
+                )
+            self.dl_model.head = self.sequential_layers
+
+        # Modelo de combinação ajustado
+        adjusted_dim = self.model_dim
+        scaled_dim = int(adjusted_dim * self.layer_scale)
+
+        self.model = nn.Sequential(
+            nn.Linear(adjusted_dim, scaled_dim),
+            nn.GELU(approximate='none'),
+            nn.LayerNorm(scaled_dim),
+            nn.Dropout(p=0.3),
+            nn.Linear(scaled_dim, self.num_classes)
+        )
+
+    # (novo) permite atualizar pesos por classe depois que o datamodule estiver pronto
+    def set_class_weights(self, class_weights: torch.Tensor | None):
+        if class_weights is not None:
+            class_weights = class_weights.float().to(self.device)
+            self.class_weights = class_weights  # buffer já existente
+        else:
+            self.class_weights = None
+        self._rebuild_loss()
+
+    def _rebuild_loss(self):
+        if self.class_weights is not None:
+            self.fn_loss = nn.CrossEntropyLoss(weight=self.class_weights, label_smoothing=self.label_smoothing)
+        else:
+            self.fn_loss = nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)
+        
+    def forward(self, x):
+        x = self.dl_model(x)
+        x = self.model(x)
+        return x
+
+    def training_step(self, batch, batch_idx):
+        images, labels, logits, loss, preds = self._commom_step(batch, batch_idx)
+        self.train_accuracy(preds, labels)
+        self.log('train_loss', loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log('train_accuracy', self.train_accuracy, prog_bar=True, on_step=False, on_epoch=True)
+        return {'loss': loss}
+    
+    def validation_step(self, batch, batch_idx):
+        images, labels, logits, loss, preds = self._commom_step(batch, batch_idx)
+        self.val_accuracy(preds, labels)
+        self.log('val_loss', loss, prog_bar=True, on_epoch=True)
+        self.log('val_accuracy', self.val_accuracy, prog_bar=True, on_epoch=True)
+        return {'val_loss': loss}
+
+    def test_step(self, batch, batch_idx):
+        images, labels, logits, loss, preds = self._commom_step(batch, batch_idx)
+
+        # Atualiza as métricas corretamente
+        self.test_accuracy(preds, labels)
+        self.test_f1(preds, labels)
+        self.test_precision(preds, labels)
+        self.test_recall(preds, labels)
+        self.test_confusion_matrix.update(preds, labels)  # (novo) acumula matriz
+
+        # Loga as métricas corretamente
+        self.log("test_loss", loss, prog_bar=True, on_epoch=True)
+        self.log("test_accuracy", self.test_accuracy.compute(), prog_bar=True)
+        self.log("test_f1", self.test_f1.compute(), prog_bar=True)
+        self.log("test_precision", self.test_precision.compute(), prog_bar=True)
+        self.log("test_recall", self.test_recall.compute(), prog_bar=True)
+
+        return {
+            "test_loss": loss,
+            "test_accuracy": self.test_accuracy.compute(),
+            "test_f1": self.test_f1.compute(),
+            "test_precision": self.test_precision.compute(),
+            "test_recall": self.test_recall.compute()        
+            }
+    
+    def on_test_epoch_end(self):
+        self.test_accuracy.reset()
+        self.test_f1.reset()
+        self.test_precision.reset()
+        self.test_recall.reset()
+
+        conf_matrix_value = self.test_confusion_matrix.compute().cpu().numpy()
+        self.test_confusion_matrix.reset()
+        print("Matriz de Confusão calculada após o teste.")
+        return conf_matrix_value
+
+    def on_validation_epoch_end(self):
+        avg_loss = torch.mean(torch.tensor(self.validation_step_outputs)) if len(self.validation_step_outputs) > 0 else torch.tensor(float('nan'))
+        self.log('avg_val_loss', avg_loss)
+        self.validation_step_outputs.clear()
+        
+    def _commom_step(self, batch, batch_idx):
+        images, labels = batch
+        logits = self.forward(images)
+        loss = self.fn_loss(logits, labels)
+        preds = torch.argmax(logits, 1)
+        return images, labels, logits, loss, preds
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(
+            self.parameters(), 
+            lr=self.learning_rate, 
+            betas = self.optimizer_momentum,
+            weight_decay=self.weight_decay)
+
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.epochs)
+
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': {
+                'scheduler': scheduler,
+                'interval': 'epoch',
+                'monitor': 'val_loss',
+                'frequency': 1,
+            }
+        }
+
     """
     Drop-in para treinar APENAS vetores de características (CSV -> tensor).
     Assinatura compatível com o seu pipeline de treino (mesmos argumentos do modelo de imagens):
