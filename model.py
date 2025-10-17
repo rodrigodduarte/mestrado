@@ -1351,13 +1351,15 @@ class CustomFeaturesOnlyModelDropIn(pl.LightningModule):
 
         # Cabeça MLP (sem imagens)
         adjusted = self.features_dim
-        hidden = max(int(adjusted * self.layer_scale), max(64, self.num_classes))
+        hidden = int(adjusted * self.layer_scale)
 
-        self.input_norm = nn.LayerNorm(adjusted, eps=1e-6, elementwise_affine=True)
-        self.fc1 = nn.Linear(adjusted, hidden)
-        self.mid_norm = nn.LayerNorm(hidden, eps=1e-6, elementwise_affine=True)
-        self.dropout = nn.Dropout(p=0.3)
-        self.fc_out = nn.Linear(hidden, self.num_classes)
+        self.model = nn.Sequential(
+            nn.Linear(adjusted, hidden),
+            nn.GELU(approximate='none'),
+            nn.LayerNorm(hidden),
+            nn.Dropout(p=0.3),
+            nn.Linear(hidden, self.num_classes)
+        )
 
         # perda (com pesos opcionais + label smoothing)
         cw = None
@@ -1405,12 +1407,7 @@ class CustomFeaturesOnlyModelDropIn(pl.LightningModule):
     # Forward -------
     def forward(self, feats):
         x = self._prep_feats(feats)
-        x = self.input_norm(x)
-        x = self.fc1(x)
-        x = torch.nn.functional.gelu(x)
-        x = self.mid_norm(x)
-        x = self.dropout(x)
-        x = self.fc_out(x)
+        x = self.model(x)
         return x
 
     def _step(self, batch):
