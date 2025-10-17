@@ -1407,6 +1407,12 @@ class CustomFeaturesOnlyModelDropIn(pl.LightningModule):
     # Forward -------
     def forward(self, feats):
         x = self._prep_feats(feats)
+        # no forward (antes de self.model(x)):
+        if x.size(-1) != self.features_dim:
+            if self.input_proj is None or self.input_proj.in_features != x.size(-1) \
+            or self.input_proj.out_features != self.features_dim:
+                self.input_proj = nn.Linear(x.size(-1), self.features_dim).to(x.device)
+            x = self.input_proj(x)
         x = self.model(x)
         return x
 
