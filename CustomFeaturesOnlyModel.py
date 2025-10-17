@@ -32,19 +32,19 @@ class CustomFeaturesOnlyModel(pl.LightningModule):
     """
 
     def __init__(self,
-                 name_dataset,
-                 shape,
-                 epochs,
-                 learning_rate,
-                 features_dim,
-                 drop_path_rate,
-                 num_classes,
-                 label_smoothing,
-                 optimizer_momentum,
-                 weight_decay,
-                 layer_scale,
+                 name_dataset: str,
+                 shape: tuple,
+                 epochs: int,
+                 learning_rate: float,
+                 features_dim: int,
+                 drop_path_rate: float,
+                 num_classes: int,
+                 label_smoothing: float,
+                 optimizer_momentum: tuple,
+                 weight_decay: float,
+                 layer_scale: float,
                  auto_project: bool = True,
-                 class_weights=None):        # <<< ADICIONE AQUI
+                 class_weights=None):
         super().__init__()
 
         self.save_hyperparameters(ignore=[
