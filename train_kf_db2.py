@@ -93,6 +93,7 @@ def _build_model(hparams, class_weights):
     model_args = dict(
         tmodel=hparams["TMODEL"],
         name_dataset=hparams["NAME_DATASET"],
+        features_dim=hparams["FEATURES_DIM"],
         shape=hparams["SHAPE"],
         epochs=hparams['MAX_EPOCHS'],
         learning_rate=hparams['LEARNING_RATE'],
@@ -182,7 +183,7 @@ def train_model():
             best_epoch = checkpoint_data.get('epoch', None)
             print(f"Melhor modelo para seed {seed}, fold {fold} salvo na época {best_epoch}")
 
-            model = CustomModel.load_from_checkpoint(best_model_path)
+            model = CustomFeaturesOnlyModelDropIn.load_from_checkpoint(best_model_path)
 
             # Reaproveita datamodule para teste
             try:
