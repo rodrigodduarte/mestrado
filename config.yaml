@@ -1,8 +1,8 @@
 # Caminhos dos diretórios de treino e teste
 TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/soja/train"
 TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/soja/test"
-PROJECT: "soja_seeds"
-CHECKPOINT_PATH: "soja_seeds_checkpoints_config_train"
+PROJECT: "soja_vec_seeds"
+CHECKPOINT_PATH: "soja_vec_seeds_checkpoints_config_train"
 NAME_DATASET: "soja"
 BEST_MODEL_PATH: /Documentos/projeto/soja_bestmodel/visionary-sweep-2/best_model.ckpt
 RUN_NAME: stilted-sweep-13
@@ -17,20 +17,24 @@ HIDDEN_UNITS: 648
 MAX_EPOCHS: 100
 NUM_CLASSES: 11
 BATCH_SIZE: 32
-DROP_PATH_RATE: 0.049964
-LABEL_SMOOTHING: 0.049964
+
+
+DROP_PATH_RATE: 0.10          # antes: 0.049964
+LABEL_SMOOTHING: 0.10         # antes: 0.049964
 LAYER_SCALE: 1.47315
-LEARNING_RATE: 0.000046342
+LEARNING_RATE: 0.0005         # antes: 0.000046342
 OPTIMIZER_MOMENTUM: 0.93113
-WEIGHT_DECAY: 4.4777e-7
+WEIGHT_DECAY: 0.05            # antes: 4.4777e-7
+
 K_FOLDS: 5
 N_SEEDS: 10
 
-USE_WEIGHTED_SAMPLER: true     # ativa amostragem balanceada no treino
-SAMPLER_REPLACEMENT: true      # comum para imbalanced (com reposição)
-USE_CLASS_WEIGHTS: true        # aplica pesos na loss (modelo deve consumir)
-WEIGHT_MODE: inv_freq          # ou: effective_num
-CB_BETA: 0.9999                # apenas se usar effective_num
+
+USE_WEIGHTED_SAMPLER: true     # mantém amostragem balanceada
+SAMPLER_REPLACEMENT: true
+USE_CLASS_WEIGHTS: false       # desativa pesos na loss para evitar supercompensação
+WEIGHT_MODE: inv_freq
+CB_BETA: 0.9999
 
 # Configurações de hardware e execução
 NUM_WORKERS: 4
