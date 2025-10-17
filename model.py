@@ -1311,6 +1311,196 @@ from torchmetrics.classification import MulticlassConfusionMatrix
 
 class CustomFeaturesOnlyModelDropIn(pl.LightningModule):
     """
+    Drop-in para treinar APENAS vetores de características (CSV -> tensor).
+    Assinatura compatível com o seu pipeline de treino (mesmos argumentos do modelo de imagens):
+      - Aceita batches como: (features, labels) OU (images, features, labels) OU dict{'features','label'}.
+      - Usa 'features_dim' vindo do config (ex.: 648).
+      - Inclui LayerNorm na entrada (importante para estabilidade com SSN) e projeção automática opcional.
+
+    Parâmetros:
+      tmodel, drop_path_rate: ignorados (mantidos para compatibilidade de assinatura).
+      class_weights: pesos por classe opcionais (tensor-like), usados na CrossEntropy com label_smoothing.
+    """
+
+    def __init__(self, tmodel, name_dataset, shape, epochs, learning_rate,
+                 drop_path_rate, num_classes, label_smoothing, optimizer_momentum,
+                 weight_decay, layer_scale, features_dim=1296, class_weights=None,
+                 auto_project: bool = True):
+        super().__init__()
+        self.save_hyperparameters()
+
+        # Hparams essenciais
+        self.num_classes = int(num_classes)
+        self.features_dim = int(features_dim)              # <<< usa o valor do config (ex.: 648)
+        self.learning_rate = float(learning_rate)
+        self.weight_decay = float(weight_decay)
+        self.optimizer_momentum = (tuple(optimizer_momentum)
+                                   if isinstance(optimizer_momentum, (list, tuple))
+                                   else (0.9, 0.999))
+        self.epochs = int(epochs)
+        self.layer_scale = float(layer_scale)
+        self.auto_project = bool(auto_project)
+
+        # Métricas
+        self.train_accuracy = Accuracy(task='multiclass', num_classes=self.num_classes)
+        self.val_accuracy   = Accuracy(task='multiclass', num_classes=self.num_classes)
+        self.test_accuracy  = Accuracy(task='multiclass', num_classes=self.num_classes)
+
+        self.train_f1 = F1Score(task="multiclass", num_classes=self.num_classes)
+        self.val_f1   = F1Score(task="multiclass", num_classes=self.num_classes)
+        self.test_f1  = F1Score(task="multiclass", num_classes=self.num_classes)
+
+        self.train_precision = Precision(task="multiclass", num_classes=self.num_classes)
+        self.val_precision   = Precision(task="multiclass", num_classes=self.num_classes)
+        self.test_precision  = Precision(task="multiclass", num_classes=self.num_classes)
+
+        self.train_recall = Recall(task="multiclass", num_classes=self.num_classes)
+        self.val_recall   = Recall(task="multiclass", num_classes=self.num_classes)
+        self.test_recall  = Recall(task="multiclass", num_classes=self.num_classes)
+
+        self.test_confusion_matrix = MulticlassConfusionMatrix(num_classes=self.num_classes)
+
+        # Cabeça MLP (estável para SSN): LN -> Linear -> GELU -> LN -> Dropout -> Linear
+        adjusted = self.features_dim
+        hidden = max(int(adjusted * self.layer_scale), max(64, self.num_classes))
+
+        self.model = nn.Sequential(
+            nn.LayerNorm(adjusted, eps=1e-6),   # normaliza o vetor de entrada
+            nn.Linear(adjusted, hidden),
+            nn.GELU(),
+            nn.LayerNorm(hidden, eps=1e-6),
+            nn.Dropout(p=0.3),
+            nn.Linear(hidden, self.num_classes),
+        )
+
+        # Projeção automática (criada sob demanda se D_in != features_dim)
+        self.input_proj: nn.Linear | None = None
+
+        # Loss com pesos por classe (opcional) + label smoothing
+        cw = None
+        if class_weights is not None:
+            try:
+                cw = torch.as_tensor(class_weights, dtype=torch.float32)
+            except Exception:
+                cw = None
+        self.register_buffer("class_weights", cw if cw is not None else None)
+        self.criterion = nn.CrossEntropyLoss(weight=self.class_weights,
+                                             label_smoothing=float(label_smoothing))
+
+    # ---------------- Utils ----------------
+    @staticmethod
+    def _extract(batch):
+        """Suporta (feats,y), (img,feats,y) ou dict{'features','label'}."""
+        if isinstance(batch, dict):
+            feats = batch.get('features', None)
+            y = batch.get('label', None)
+            if feats is None or y is None:
+                raise ValueError("Batch dict deve conter 'features' e 'label'.")
+            return feats, y
+
+        if not isinstance(batch, (tuple, list)):
+            raise ValueError("Batch deve ser tupla/lista (features,label) ou (image,features,label).")
+
+        if len(batch) == 2:
+            feats, y = batch
+        elif len(batch) == 3:
+            _img, feats, y = batch  # ignora imagens
+        else:
+            raise ValueError("Batch deve ter 2 ou 3 elementos.")
+        return feats, y
+
+    @staticmethod
+    def _prep_feats(x):
+        if not torch.is_tensor(x):
+            x = torch.tensor(x)
+        x = x.float()
+        if x.ndim == 1:
+            x = x.unsqueeze(0)     # [D] -> [1, D]
+        elif x.ndim > 2:
+            x = x.view(x.size(0), -1)
+        return x
+
+    @staticmethod
+    def _prep_labels(y):
+        if not torch.is_tensor(y):
+            y = torch.tensor(y)
+        return y.long().view(-1)
+
+    # ---------------- Forward ----------------
+    def forward(self, feats):
+        x = self._prep_feats(feats)
+
+        # Projeta automaticamente se a dimensão do vetor não bater com features_dim
+        if self.auto_project and x.size(-1) != self.features_dim:
+            if (self.input_proj is None or
+                self.input_proj.in_features != x.size(-1) or
+                self.input_proj.out_features != self.features_dim):
+                self.input_proj = nn.Linear(x.size(-1), self.features_dim).to(x.device)
+            x = self.input_proj(x)
+
+        return self.model(x)
+
+    def _step(self, batch):
+        feats, y = self._extract(batch)
+        feats = self._prep_feats(feats)
+        y = self._prep_labels(y)
+        logits = self.forward(feats)
+        loss = self.criterion(logits, y)
+        preds = logits.argmax(1)
+        return loss, preds, y
+
+    # ---------------- Steps ----------------
+    def training_step(self, batch, _):
+        loss, preds, y = self._step(batch)
+        self.train_accuracy(preds, y)
+        self.train_f1(preds, y)
+        self.train_precision(preds, y)
+        self.train_recall(preds, y)
+        self.log_dict({'train_loss': loss, 'train_accuracy': self.train_accuracy},
+                      prog_bar=True, on_step=False, on_epoch=True)
+        return loss
+
+    def validation_step(self, batch, _):
+        loss, preds, y = self._step(batch)
+        self.val_accuracy(preds, y)
+        self.val_f1(preds, y)
+        self.val_precision(preds, y)
+        self.val_recall(preds, y)
+        self.log_dict({'val_loss': loss, 'val_accuracy': self.val_accuracy},
+                      prog_bar=True, on_step=False, on_epoch=True)
+
+    def test_step(self, batch, _):
+        loss, preds, y = self._step(batch)
+        self.test_accuracy(preds, y)
+        self.test_f1(preds, y)
+        self.test_precision(preds, y)
+        self.test_recall(preds, y)
+        self.test_confusion_matrix.update(preds, y)
+
+        self.log("test_loss", loss, prog_bar=True, on_epoch=True)
+        self.log("test_accuracy", self.test_accuracy.compute(), prog_bar=True)
+        self.log("test_f1",        self.test_f1.compute(),        prog_bar=True)
+        self.log("test_precision", self.test_precision.compute(), prog_bar=True)
+        self.log("test_recall",    self.test_recall.compute(),    prog_bar=True)
+        return {"test_loss": loss}
+
+    def on_test_epoch_end(self):
+        _ = self.test_confusion_matrix.compute()
+        self.test_confusion_matrix.reset()
+        self.train_accuracy.reset(); self.val_accuracy.reset(); self.test_accuracy.reset()
+        self.train_f1.reset(); self.val_f1.reset(); self.test_f1.reset()
+        self.train_precision.reset(); self.val_precision.reset(); self.test_precision.reset()
+        self.train_recall.reset(); self.val_recall.reset(); self.test_recall.reset()
+
+    # ---------------- Optim ----------------
+    def configure_optimizers(self):
+        opt = torch.optim.AdamW(self.parameters(),
+                                lr=self.learning_rate,
+                                weight_decay=self.weight_decay,
+                                betas=self.optimizer_momentum)
+        sch = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=self.epochs)
+        return {"optimizer": opt, "lr_scheduler": sch}
+    """
     Drop-in para treinar APENAS vetores de características com a mesma assinatura do CustomModel.
     Aceita 'tmodel' e 'drop_path_rate' (ignorados), e suporta 'class_weights' como no treino com imagens.
     Compatível com batches: (features, labels) OU (images, features, labels).
