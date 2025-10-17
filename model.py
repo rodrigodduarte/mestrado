@@ -1350,7 +1350,7 @@ class CustomFeaturesOnlyModelDropIn(pl.LightningModule):
         self.test_confusion_matrix = MulticlassConfusionMatrix(num_classes=self.num_classes)
 
         # Cabeça MLP (sem imagens)
-        adjusted = self.features_dim
+        adjusted = self.features_dim/2
         hidden = max(int(adjusted * self.layer_scale), max(64, self.num_classes))
 
         self.model = nn.Sequential(
