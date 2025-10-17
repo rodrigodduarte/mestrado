@@ -1321,7 +1321,6 @@ class CustomFeaturesOnlyModelDropIn(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         
-        self.input_proj = None
 
         self.num_classes = int(num_classes)
         self.features_dim = int(features_dim)
@@ -1352,15 +1351,17 @@ class CustomFeaturesOnlyModelDropIn(pl.LightningModule):
 
         # Cabeça MLP (sem imagens)
         adjusted = self.features_dim
-        hidden = int(adjusted * self.layer_scale)
+        hidden = max(int(adjusted * self.layer_scale), max(64, self.num_classes))
 
         self.model = nn.Sequential(
+            nn.LayerNorm(adjusted, eps=1e-6),      # <<< volta a normalização da entrada
             nn.Linear(adjusted, hidden),
-            nn.GELU(approximate='none'),
-            nn.LayerNorm(hidden),
+            nn.GELU(),
+            nn.LayerNorm(hidden, eps=1e-6),
             nn.Dropout(p=0.3),
-            nn.Linear(hidden, self.num_classes)
+            nn.Linear(hidden, self.num_classes),
         )
+
 
         # perda (com pesos opcionais + label smoothing)
         cw = None
@@ -1408,12 +1409,6 @@ class CustomFeaturesOnlyModelDropIn(pl.LightningModule):
     # Forward -------
     def forward(self, feats):
         x = self._prep_feats(feats)
-        # no forward (antes de self.model(x)):
-        if x.size(-1) != self.features_dim:
-            if self.input_proj is None or self.input_proj.in_features != x.size(-1) \
-            or self.input_proj.out_features != self.features_dim:
-                self.input_proj = nn.Linear(x.size(-1), self.features_dim).to(x.device)
-            x = self.input_proj(x)
         x = self.model(x)
         return x
 
