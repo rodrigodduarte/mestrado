@@ -1323,7 +1323,7 @@ class CustomFeaturesOnlyModelDropIn(pl.LightningModule):
         
 
         self.num_classes = int(num_classes)
-        self.features_dim = 1296
+        self.features_dim = int(features_dim)
         self.learning_rate = float(learning_rate)
         self.weight_decay = float(weight_decay)
         self.optimizer_momentum = tuple(optimizer_momentum) if isinstance(optimizer_momentum, (list, tuple)) else (0.9, 0.999)
