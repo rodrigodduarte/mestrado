@@ -11,7 +11,7 @@ CM_PATH: /home/rodrigoduarte/Documentos/projeto/matriz_de_confusao
 # Hiperparâmetros relacionados à configuração do modelo
 TMODEL: "convnext_t"
 SHAPE: [224, 224]
-FEATURES_DIM: 648
+FEATURES_DIM: 1296
 HIDDEN_LAYERS: 2
 HIDDEN_UNITS: 1296
 MAX_EPOCHS: 25
