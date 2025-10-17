@@ -1317,7 +1317,7 @@ class CustomFeaturesOnlyModelDropIn(pl.LightningModule):
     """
     def __init__(self, tmodel, name_dataset, shape, epochs, learning_rate,
                  drop_path_rate, num_classes, label_smoothing, optimizer_momentum,
-                 weight_decay, layer_scale, features_dim=1296, class_weights=None):
+                 weight_decay, layer_scale, features_dim, class_weights=None):
         super().__init__()
         self.save_hyperparameters()
         
