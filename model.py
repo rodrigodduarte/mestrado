@@ -1317,13 +1317,13 @@ class CustomFeaturesOnlyModelDropIn(pl.LightningModule):
     """
     def __init__(self, tmodel, name_dataset, shape, epochs, learning_rate,
                  drop_path_rate, num_classes, label_smoothing, optimizer_momentum,
-                 weight_decay, layer_scale, features_dim, class_weights=None):
+                 weight_decay, layer_scale, features_dim=1296, class_weights=None):
         super().__init__()
         self.save_hyperparameters()
         
 
         self.num_classes = int(num_classes)
-        self.features_dim = int(features_dim)
+        self.features_dim = 1296
         self.learning_rate = float(learning_rate)
         self.weight_decay = float(weight_decay)
         self.optimizer_momentum = tuple(optimizer_momentum) if isinstance(optimizer_momentum, (list, tuple)) else (0.9, 0.999)
@@ -1350,7 +1350,10 @@ class CustomFeaturesOnlyModelDropIn(pl.LightningModule):
         self.test_confusion_matrix = MulticlassConfusionMatrix(num_classes=self.num_classes)
 
         # Cabeça MLP (sem imagens)
-        adjusted = self.features_dim/2
+        adjusted = self.features_dim
+        hidden = int(adjusted * self.layer_scale)
+
+        adjusted = self.features_dim
         hidden = max(int(adjusted * self.layer_scale), max(64, self.num_classes))
 
         self.model = nn.Sequential(
@@ -1409,7 +1412,12 @@ class CustomFeaturesOnlyModelDropIn(pl.LightningModule):
     # Forward -------
     def forward(self, feats):
         x = self._prep_feats(feats)
-        x = self.model(x)
+        x = self.input_norm(x)
+        x = self.fc1(x)
+        x = torch.nn.functional.gelu(x)
+        x = self.mid_norm(x)
+        x = self.dropout(x)
+        x = self.fc_out(x)
         return x
 
     def _step(self, batch):
