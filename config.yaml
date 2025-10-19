@@ -9,7 +9,7 @@ RUN_NAME: stilted-sweep-13
 CM_PATH: /home/rodrigoduarte/Documentos/projeto/matriz_de_confusao
 
 # Hiperparâmetros relacionados à configuração do modelo
-TMODEL: "convnext_t"
+TMODEL: "vector"
 SHAPE: [224, 224]
 FEATURES_DIM: 648
 HIDDEN_LAYERS: 2
