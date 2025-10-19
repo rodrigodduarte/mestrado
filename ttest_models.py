@@ -9,7 +9,7 @@ try:
 except Exception as e:
     raise SystemExit("scipy is required. Try: pip install scipy") from e
 
-# ---- Preferências de chaves de métrica (autodetecção) ----
+# ---- Candidatas de métrica para autodetecção ----
 CAND_KEYS = [
     "test_accuracy","accuracy","acc",
     "test_f1","f1","f1_score",
@@ -18,7 +18,7 @@ CAND_KEYS = [
     "test_loss","loss"
 ]
 
-# ---- Utilitário para salvar stdout opcionalmente em arquivo (--out) ----
+# ---- Tee p/ gravar stdout em arquivo (--out) ----
 class Tee:
     def __init__(self, *files):
         self.files = files
@@ -51,7 +51,6 @@ def parse_result_file(path: Path):
                 try:
                     test_metrics = json.loads(j)
                 except json.JSONDecodeError:
-                    # reparo simples (caso tenha aspas simples)
                     j2 = j.replace("'", '"')
                     try:
                         test_metrics = json.loads(j2)
@@ -80,27 +79,17 @@ def gather_results(root: Path):
         out[(s,f)] = tm
     return out
 
-# ---- Inferência de rótulo a partir do hiperparâmetro tmodel ----
+# ---- Rótulo a partir de tmodel (hyperparams_used.json) ----
 def infer_model_label(root: Path, manual_label: str|None = None) -> str:
-    """
-    Retorna o rótulo a ser impresso.
-    Prioridade:
-      1) manual_label (se fornecido por --labelA/--labelB)
-      2) valor de 'tmodel' (ou 'TMODEL') em hyperparams_used.json
-      3) nome da pasta root
-    """
     if manual_label:
         return manual_label
-    # tenta achar hyperparams_used.json na raiz ou logo abaixo
     candidates = []
     hp_root = root / "hyperparams_used.json"
     if hp_root.exists():
         candidates.append(hp_root)
-    # fallback: procura o primeiro arquivo com esse nome abaixo da raiz
     if not candidates:
         for p in root.glob("**/hyperparams_used.json"):
-            candidates.append(p)
-            break
+            candidates.append(p); break
     for hp in candidates:
         try:
             data = json.loads(hp.read_text(encoding="utf-8"))
@@ -109,7 +98,7 @@ def infer_model_label(root: Path, manual_label: str|None = None) -> str:
                     return data[key].strip()
         except Exception:
             pass
-    return root.name  # fallback final
+    return root.name
 
 # ---- Estatística ----
 def ci95_of_mean(x: np.ndarray):
@@ -152,6 +141,42 @@ def aggregate_by_seed(vals: np.ndarray, pairs: list[tuple[int,int]]):
     means = np.array([np.mean(by_seed[s]) for s in seeds], dtype=float)
     return means, seeds
 
+# ---- Tabelas por modelo (folds × seeds) ----
+def build_matrix(vals_map: dict, seeds: list[int], folds: list[int]):
+    M = np.full((len(folds), len(seeds)), np.nan)
+    for i, f in enumerate(folds):
+        for j, s in enumerate(seeds):
+            v = vals_map.get((s, f), np.nan)
+            if isinstance(v, (int,float)):
+                M[i, j] = float(v)
+    return M
+
+def fmt(x):
+    return "NA".rjust(8) if (x is None or (isinstance(x, float) and np.isnan(x))) else f"{x:8.4f}"
+
+def print_model_table(label: str, metric_name: str, seeds: list[int], folds: list[int], M: np.ndarray):
+    # Cabeçalho
+    header = ["fold\\seed"] + [f"s{int(s)}" for s in seeds] + ["mean_fold"]
+    widths = [max(9, len(h)) for h in header]
+    def print_row(cells):
+        print(" | ".join(str(c).rjust(w) for c, w in zip(cells, widths)))
+    # Título
+    print(f"=== Tabela — {label} — {metric_name} ===")
+    print_row(header)
+    print("-" * (sum(widths) + 3*(len(widths)-1)))
+    # Linhas dos folds
+    row_means = np.nanmean(M, axis=1) if M.size else np.array([])
+    for i, f in enumerate(folds):
+        cells = [f"fold_{f}"] + [fmt(M[i, j]) for j in range(len(seeds))] + [fmt(row_means[i])]
+        print_row(cells)
+    # Linha de médias por seed + agregada
+    col_means = np.nanmean(M, axis=0) if M.size else np.array([])
+    agg = float(np.nanmean(M)) if M.size else float("nan")
+    print("-" * (sum(widths) + 3*(len(widths)-1)))
+    tail = ["mean_seed"] + [fmt(col_means[j]) for j in range(len(seeds))] + [fmt(agg)]
+    print_row(tail)
+    print()
+
 # ---- Main ----
 def main():
     ap = argparse.ArgumentParser(description="t-teste pareado entre dois modelos a partir de resultados_fold.txt")
@@ -162,6 +187,8 @@ def main():
     ap.add_argument("--labelB", default=None, help="Rótulo manual para o modelo B (sobrepõe 'tmodel')")
     ap.add_argument("--out", default=None, help="Se informado, salva a saída completa em um arquivo .txt")
     args = ap.parse_args()
+
+    stdout_backup = sys.stdout  # p/ restaurar depois
 
     # saída opcional em arquivo
     out_fh = None
@@ -190,7 +217,6 @@ def main():
     # Detecta métrica
     mk = args.metric or pick_metric_key(A[common[0]], args.metric)
     if mk not in B[common[0]]:
-        # tenta conciliar por chaves candidatas
         keysA = set(A[common[0]].keys())
         keysB = set(B[common[0]].keys())
         inter = [k for k in CAND_KEYS if k in keysA and k in keysB]
@@ -200,6 +226,7 @@ def main():
             raise SystemExit(f"A métrica '{mk}' não está presente em ambos. "
                              f"Exemplos A={list(keysA)[:6]} | B={list(keysB)[:6]}")
 
+    # Vetores pareados para t-teste
     a_vals, b_vals = [], []
     for k in common:
         va = A[k].get(mk, None)
@@ -214,7 +241,7 @@ def main():
     print(f"Pares (seed, fold) em comum: {len(common)}")
     print(f"Comparando {labelA} (A) vs {labelB} (B) — Diferença reportada é A−B\n")
 
-    # Fold-a-fold
+    # ---- Estatísticas pareadas ----
     ciA, mA, sA = ci95_of_mean(a)
     ciB, mB, sB = ci95_of_mean(b)
     res_fold = paired_ttest(a, b)
@@ -224,15 +251,6 @@ def main():
     print(f"{labelB}: média={mB:.4f} ± {sB:.4f}  IC95%=[{ciB[0]:.4f}, {ciB[1]:.4f}]")
     print(f"Diff(A-B): média={res_fold['mean_diff']:.4f}  IC95%=[{res_fold['ci95_diff'][0]:.4f}, {res_fold['ci95_diff'][1]:.4f}]")
     print(f"t({res_fold['n']-1})={res_fold['t']:.3f}, p(bicaudal)={res_fold['p_two']:.3e}, d={res_fold['cohen_d']:.3f}\n")
-
-    # Seed-a-seed (recomendado)
-    def aggregate_by_seed(vals: np.ndarray, pairs: list[tuple[int,int]]):
-        by_seed = defaultdict(list)
-        for (s,f), v in zip(pairs, vals):
-            by_seed[s].append(float(v))
-        seeds = sorted(by_seed)
-        means = np.array([np.mean(by_seed[s]) for s in seeds], dtype=float)
-        return means, seeds
 
     a_seed, seedsA = aggregate_by_seed(a, common)
     b_seed, seedsB = aggregate_by_seed(b, common)
@@ -247,9 +265,23 @@ def main():
     print(f"Diff(A-B): média={res_seed['mean_diff']:.4f}  IC95%=[{res_seed['ci95_diff'][0]:.4f}, {res_seed['ci95_diff'][1]:.4f}]")
     print(f"t({res_seed['n']-1})={res_seed['t']:.3f}, p(bicaudal)={res_seed['p_two']:.3e}, d={res_seed['cohen_d']:.3f}\n")
 
-    print("Nota: para teste unilateral (ex.: A>B), p_unicaudal = p_bicaudal/2 quando a diferença tem o sinal esperado.")
+    # ---- Tabelas por modelo (folds × seeds) ----
+    seeds = sorted({s for s, _ in common})
+    folds = sorted({f for _, f in common})
+    # Mapas (seed, fold) -> valor
+    Amap = {k: A[k].get(mk, np.nan) for k in common}
+    Bmap = {k: B[k].get(mk, np.nan) for k in common}
+    MA = build_matrix(Amap, seeds, folds)
+    MB = build_matrix(Bmap, seeds, folds)
+
+    print_model_table(labelA, mk, seeds, folds, MA)
+    print_model_table(labelB, mk, seeds, folds, MB)
+
+    print("Nota: 'mean_fold' = média entre seeds no mesmo fold; 'mean_seed' = média entre folds na mesma seed;")
+    print("      célula final de 'mean_seed' é a MÉDIA AGREGADA (todos os folds × seeds).\n")
 
     if out_fh:
+        sys.stdout = stdout_backup  # restaura
         out_fh.close()
 
 if __name__ == "__main__":
