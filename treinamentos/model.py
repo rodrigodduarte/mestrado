@@ -1,26 +1,16 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-import torch.optim as optim
-from torch.optim.lr_scheduler import CosineAnnealingLR, LambdaLR, SequentialLR
-
-import torchvision
-from torchvision import models
-from torchvision.models.convnext import (convnext_tiny, ConvNeXt_Tiny_Weights,
-                                         convnext_small, ConvNeXt_Small_Weights,
-                                         convnext_base, ConvNeXt_Base_Weights,
-                                         convnext_large, ConvNeXt_Large_Weights)
-from torchvision.models.swin_transformer import (swin_t, Swin_T_Weights,
-                                                 swin_s, Swin_S_Weights,
-                                                 swin_b, Swin_B_Weights)
-import torchmetrics
-from torchmetrics import Accuracy, F1Score, Precision, Recall, ConfusionMatrix
-from torchmetrics.classification import MulticlassConfusionMatrix
-
 import pytorch_lightning as pl
 
-import config
-from compact_transform.src import cct_14_7x2_224, cct_14_7x2_384, cct_14_7x2_384_fl
+from torchvision import models
+from torchvision.models.swin_transformer import swin_t, Swin_T_Weights
+from torchvision.models.convnext import ConvNeXt_Tiny_Weights
+
+from torchmetrics import Accuracy, F1Score, Precision, Recall
+from torchmetrics.classification import MulticlassConfusionMatrix
+
+
 
 class CustomModel(pl.LightningModule):
     def __init__(self, tmodel, name_dataset, shape, epochs, learning_rate,

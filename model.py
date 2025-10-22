@@ -1822,3 +1822,4 @@ class CustomModel_vec_desbalanced(pl.LightningModule):
         opt = torch.optim.AdamW(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay, betas=self.optimizer_momentum)
         sch = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=self.epochs)
         return {"optimizer": opt, "lr_scheduler": sch}
+    
