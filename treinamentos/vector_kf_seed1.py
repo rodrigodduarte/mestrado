@@ -178,7 +178,12 @@ def train_model():
 
             # ---------- Melhor checkpoint ----------
             best_model_path = fold_callback.best_model_path
-            checkpoint_data = torch.load(best_model_path, map_location='cpu')
+            try:
+                checkpoint_data = torch.load(best_model_path, map_location='cpu', weights_only=True)
+            except TypeError:
+                # PyTorch mais antigo não aceita weights_only
+                checkpoint_data = torch.load(best_model_path, map_location='cpu')
+
             best_epoch = checkpoint_data.get('epoch', None)
             print(f"Melhor modelo para seed {seed}, fold {fold} salvo na época {best_epoch}")
 
