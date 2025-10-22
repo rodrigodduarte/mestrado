@@ -211,7 +211,7 @@ if __name__ == "__main__":
             "learning_rate":     {"min": 1e-5, "max": 2e-4, "distribution": "uniform"},
             "weight_decay":      {"min": 1e-7, "max": 1e-5, "distribution": "uniform"},
             "optimizer_momentum":{"min": 0.90, "max": 0.99, "distribution": "uniform"},
-            "layer_scale":       {"min": 0.5, "max": 2.0,  "distribution": "uniform"},
+            "layer_scale":       {"min": 0.5, "max": 4.0,  "distribution": "uniform"},
             "label_smoothing":   {"min": 0.0, "max": 0.2,  "distribution": "uniform"},
             "fold_idx":          {"values": list(range(effective_splits))}
         }
