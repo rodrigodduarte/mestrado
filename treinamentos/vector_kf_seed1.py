@@ -1,4 +1,4 @@
-# train_kf_no_wandb_f.py  — versão adaptada p/ CustomModel + CustomImageModule_kf (desbalanceamento)
+# train_kf_no_wandb_f.py  — versão adaptada p/ CustomFeaturesOnlyModel + CustomFeaturesFromFoldersModule_kf (desbalanceamento)
 
 import os
 import time
@@ -11,8 +11,8 @@ import random
 from pytorch_lightning.callbacks import TQDMProgressBar, ModelCheckpoint
 
 # ====== IMPORTS (ajuste o caminho se necessário) ======
-from model import CustomModel
-from dataset import CustomImageModule_kf
+from model import CustomFeaturesOnlyModel
+from dataset import CustomFeaturesFromFoldersModule_kf
 
 # (se você usa callbacks próprios, mantenha)
 from callbacks import (
@@ -79,23 +79,23 @@ def _build_datamodule(hparams, k_splits, fold):
     )
     balance_mode = hparams.get('BALANCE_MODE', 'none')
     try:
-        dm = CustomImageModule_kf(**dm_kwargs, balance=balance_mode)
+        dm = CustomFeaturesFromFoldersModule_kf(**dm_kwargs, balance=balance_mode)
     except TypeError:
-        dm = CustomImageModule_kf(**dm_kwargs)  # versões antigas sem 'balance'
+        dm = CustomFeaturesFromFoldersModule_kf(**dm_kwargs)  # versões antigas sem 'balance'
         balance_mode = 'none'
     return dm, balance_mode
 
 def _build_model(hparams, class_weights):
     """
-    Constrói CustomModel, injetando class_weights no ctor.
+    Constrói CustomFeaturesOnlyModel, injetando class_weights no ctor.
     Se o ctor não aceitar, tenta set_class_weights (retrocompatibilidade).
     """
     model_args = dict(
-        tmodel=hparams["TMODEL"],
         name_dataset=hparams["NAME_DATASET"],
         shape=hparams["SHAPE"],
         epochs=hparams['MAX_EPOCHS'],
         learning_rate=hparams['LEARNING_RATE'],
+        features_dim=int(hparams['FEATURES_DIM']),
         drop_path_rate=hparams['DROP_PATH_RATE'],
         num_classes=hparams['NUM_CLASSES'],
         label_smoothing=hparams['LABEL_SMOOTHING'],
@@ -105,10 +105,10 @@ def _build_model(hparams, class_weights):
     )
 
     try:
-        model = CustomModel(**model_args, class_weights=class_weights)
+        model = CustomFeaturesOnlyModel(**model_args, class_weights=class_weights)
         return model, True  # passou via ctor
     except TypeError:
-        model = CustomModel(**model_args)
+        model = CustomFeaturesOnlyModel(**model_args)
         injected = False
         try:
             if class_weights is not None and hasattr(model, "set_class_weights"):
@@ -182,7 +182,7 @@ def train_model():
             best_epoch = checkpoint_data.get('epoch', None)
             print(f"Melhor modelo para seed {seed}, fold {fold} salvo na época {best_epoch}")
 
-            model = CustomModel.load_from_checkpoint(best_model_path)
+            model = CustomFeaturesOnlyModel.load_from_checkpoint(best_model_path)
 
             # Reaproveita datamodule para teste
             try:
