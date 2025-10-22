@@ -120,7 +120,7 @@ def _build_model(hparams, class_weights):
 
 # ---------------- treino principal ----------------
 def train_model():
-    h = load_hyperparameters('config1.yaml')
+    h = load_hyperparameters('treinamentos/config1.yaml')
     k_splits = h['K_FOLDS']
     n_seeds = h.get('N_SEEDS', 1)
 
