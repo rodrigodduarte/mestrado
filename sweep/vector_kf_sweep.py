@@ -23,12 +23,12 @@ import wandb
 # ---------------- utils ----------------
 def _load_hparams():
     """Tenta carregar hparams de treinamentos/config1.yaml; se não existir, cai para config.yaml."""
-    candidates = ["treinamentos/config1.yaml", "config.yaml"]
+    candidates = ["sweep/config1.yaml", "config.yaml"]
     for p in candidates:
         if os.path.exists(p):
             with open(p, "r") as f:
                 return yaml.safe_load(f), p
-    raise FileNotFoundError("Nenhum arquivo de config encontrado: treinamentos/config1.yaml ou config.yaml")
+    raise FileNotFoundError("Nenhum arquivo de config encontrado: sweep/config1.yaml ou config.yaml")
 
 def _set_seeds(seed: int = 42):
     torch.backends.cudnn.deterministic = True
