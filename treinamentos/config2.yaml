@@ -1,33 +1,33 @@
 # Caminhos dos diretórios de treino e teste
-TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/soja/train"
-TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/soja/test"
-PROJECT: "soja_CNN_seeds"
-CHECKPOINT_PATH: "soja_vec_seeds_checkpoints_config_train"
-NAME_DATASET: "soja"
-BEST_MODEL_PATH: /Documentos/projeto/soja_bestmodel/visionary-sweep-2/best_model.ckpt
+TRAIN_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/train"
+TEST_DIR: "/home/rodrigoduarte/Documentos/projeto/imagens/flavia/test"
+PROJECT: "flavia_vec_seeds"
+CHECKPOINT_PATH: "flavia_vec_seeds_checkpoints_config_train"
+NAME_DATASET: "flavia"
+BEST_MODEL_PATH: /Documentos/projeto/flavia_bestmodel/visionary-sweep-2/best_model.ckpt
 RUN_NAME: stilted-sweep-13
 CM_PATH: /home/rodrigoduarte/Documentos/projeto/matriz_de_confusao
 
 # Hiperparâmetros relacionados à configuração do modelo
-TMODEL: "convnext_t"
+TMODEL: "vector"
 SHAPE: [224, 224]
 FEATURES_DIM: 648
 HIDDEN_LAYERS: 2
 HIDDEN_UNITS: 648
-MAX_EPOCHS: 300
-NUM_CLASSES: 11
-BATCH_SIZE: 32
+MAX_EPOCHS: 200
+NUM_CLASSES: 15
+BATCH_SIZE: 64
 
 
 DROP_PATH_RATE: 0.10          # antes: 0.049964
-LABEL_SMOOTHING: 0.10         # antes: 0.049964
-LAYER_SCALE: 1.47315
-LEARNING_RATE: 0.0005         # antes: 0.000046342
-OPTIMIZER_MOMENTUM: 0.93113
-WEIGHT_DECAY: 0.05            # antes: 4.4777e-7
+LABEL_SMOOTHING: 0.0023285         # antes: 0.049964
+LAYER_SCALE: 3.69233
+LEARNING_RATE: 0.00017058      # antes: 0.000046342
+OPTIMIZER_MOMENTUM: 0.95617
+WEIGHT_DECAY: 0.0000064721           # antes: 4.4777e-7
 
 K_FOLDS: 5
-N_SEEDS: 10
+N_SEEDS: 1
 
 
 USE_WEIGHTED_SAMPLER: true     # mantém amostragem balanceada
