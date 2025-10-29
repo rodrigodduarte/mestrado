@@ -137,7 +137,7 @@ def train_model():
         seed_dir = os.path.join(run_dir, f"seed_{seed}")
         os.makedirs(seed_dir, exist_ok=True)
 
-        for fold in range(1, k_splits):
+        for fold in range(k_splits):
             print(f"\n==================== Fold {fold+1}/{k_splits} ====================")
             fold_dir = os.path.join(seed_dir, f"fold_{fold}")
             os.makedirs(fold_dir, exist_ok=True)
