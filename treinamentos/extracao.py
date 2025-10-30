@@ -1,77 +1,78 @@
 #!/usr/bin/env python3
-# benchmark_stats.py
+# extracao_all.py
 #
-# Mede custo de treino e inferência de UM fold com apenas 1 época,
-# e salva estatísticas em /Documentos/projeto/treinamentos/estatisticas.
+# Executa benchmark (1 época por fold) para TODOS os modelos definidos,
+# mas usando APENAS o config1.yaml.
 #
-# O script:
-# - treina por 1 época (somente para medir custo, não para ter acurácia final)
-# - salva checkpoint do "melhor" modelo (val_loss mínimo)
-# - mede tempo de treino, tempo de teste, latência média por imagem,
-#   throughput, pico de memória GPU, tamanho do checkpoint, nº de parâmetros
-# - mede métricas de teste (accuracy, f1, precision, recall, loss)
-# - salva tudo em .txt e .json por fold
+# Para cada modelo em TMODELS_TO_TRY e para cada fold:
+#   - treina 1 época
+#   - mede tempo de treino, tempo de teste
+#   - mede latência média por imagem, throughput, pico de memória GPU
+#   - mede tamanho do checkpoint, nº de parâmetros
+#   - coleta métricas de teste (acc, f1, precision, recall, loss)
+#   - salva estatísticas no diretório treinamentos/estatisticas/
 #
-# Atenção:
-# - Usa TMODEL (do YAML) para decidir qual classe de modelo construir:
-#     convnext_t, swint_t               -> CustomModel
-#     convnext_t_ne, swint_t_ne         -> CustomEnsembleModel
-#     triple                            -> CustomModelTriple
-#     vector                            -> CustomFeaturesOnlyModel
-# - Usa o datamodule correspondente:
-#     imagem                           -> CustomImageModule_kf
-#     imagem+vetor (csv/features SSN)  -> CustomImageCSVModule_kf
-#     só vetor                         -> CustomFeaturesFromFoldersModule_kf
+# Depois agrega por modelo (média ± std entre folds) e gera:
+#   - resumo.txt por modelo
+#   - <dataset>_tabela_resumo.txt para o dataset inteiro
 #
-# Execução sugerida:
-#   python benchmark_stats.py --config config1.yaml --fold 0
+# Estrutura de saída:
+# treinamentos/
+#   estatisticas/
+#     <dataset>_<tmodel>/
+#       fold_0/
+#         best_model.ckpt
+#         hyperparams_used.json
+#         benchmark_report.json
+#         benchmark_result.txt
+#       fold_1/
+#       ...
+#       resumo.txt
+#     <dataset>_tabela_resumo.txt
 #
-# Você roda uma vez pra cada TMODEL (convnext_t, swint_t, ...).
+# Requisitos:
+# - Este script está no diretório treinamentos/
+# - config1.yaml está em treinamentos/config1.yaml
+# - dataset.py, model.py, callbacks.py estão em treinamentos/
+# - estatisticas/ já existe (ou o script vai criar)
 #
-# Saída em disco:
-# /Documentos/projeto/treinamentos/estatisticas/<DATASET>_<TMODEL>/fold_<FOLD>/
-#    - best_model.ckpt
-#    - hyperparams_used.json
-#    - benchmark_report.json
-#    - benchmark_result.txt  (humano lê e cola no artigo)
+# Execução:
+#   python extracao_all.py
+#
+# Obs: cada fold roda 1 época, então é um benchmark rápido, não um treino final.
 
 
 import os
 import time
 import json
 import yaml
-import argparse
 import random
 import numpy as np
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import TQDMProgressBar, ModelCheckpoint
 
-# ===== seus modelos =====
+# importa suas implementações locais
 from model import (
     CustomModel,
     CustomEnsembleModel,
     CustomModelTriple,
     CustomFeaturesOnlyModel,
 )
-# CustomModel          -> convnext_t / swint_t (imagem)
-# CustomEnsembleModel  -> convnext_t_ne / swint_t_ne (imagem + vetor SSN)
-# CustomModelTriple    -> triple (ConvNeXt + Swin + SSN)
-# CustomFeaturesOnlyModel -> vector (apenas vetor SSN)
-
-
-# ===== seus datamodules =====
 from dataset import (
     CustomImageModule_kf,
     CustomImageCSVModule_kf,
-    # CustomFeaturesFromFoldersModule_kf será importado dinamicamente
+    # CustomFeaturesFromFoldersModule_kf será importado dinamicamente se precisar
 )
 
+
+# -------------------------------------------------
+# utilidades básicas
+# -------------------------------------------------
 
 def load_hparams(path_yaml: str):
     with open(path_yaml, "r") as f:
         return yaml.safe_load(f)
-
 
 def set_seeds(seed: int):
     torch.backends.cudnn.deterministic = True
@@ -81,11 +82,10 @@ def set_seeds(seed: int):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
-
 def len_dataloader_safe(dl):
     """
-    Número total de amostras no dataloader de teste.
-    Usado pra calcular latência média e throughput.
+    Retorna o número total de amostras no dataloader de teste,
+    usado pra calcular latência média e throughput.
     """
     try:
         return len(dl.dataset)
@@ -105,45 +105,40 @@ def len_dataloader_safe(dl):
                     n += 1
         return n
 
-
 def infer_features_dim_from_dm(dm):
     """
-    Para modelos imagem+vetor, precisamos saber o tamanho do vetor de atributos
-    (features_dim) pra inicializar a cabeça MLP corretamente.
-
-    Assumimos batch = (imgs, features, labels).
+    Para modelos imagem+vetor (ensemble / triple),
+    inferimos o tamanho do vetor SSN a partir de um batch do datamodule.
+    Esperado batch = (imgs, features, labels).
     """
     loader = dm.train_dataloader()
     batch = next(iter(loader))
 
     assert isinstance(batch, (list, tuple)) and len(batch) >= 2, \
-        "Batch inesperado. Esperava (imagens, features, rótulos) para inferir features_dim."
+        "Batch inesperado. Esperava (img, features, label) para inferir features_dim."
 
     features = batch[1]
-
-    # se vier lista/tupla, pega primeiro elemento como tensor
     if isinstance(features, (list, tuple)):
         features = torch.as_tensor(features[0])
 
-    # se features for 1D, dim = tamanho do vetor
-    if features.ndim == 1:
+    if features.ndim == 1:  # vetor 1D direto
         return int(features.shape[0])
 
-    # caso típico: (B, dim)
+    # caso usual: (B, dim)
     return int(features.shape[-1])
 
 
+# -------------------------------------------------
+# construção dinâmica do DataModule e do Modelo
+# -------------------------------------------------
+
 def build_datamodule(h, n_splits: int, fold_idx: int):
     """
-    Cria o DataModule correto com base em h["TMODEL"].
-
-    - convnext_t, swint_t:
-        usam só imagem -> CustomImageModule_kf
-    - convnext_t_ne, swint_t_ne, triple:
-        usam imagem + vetor SSN -> CustomImageCSVModule_kf
-    - vector:
-        usa só vetor SSN -> CustomFeaturesFromFoldersModule_kf
-          (importado dinamicamente)
+    Cria o DataModule certo de acordo com o TMODEL.
+    - convnext_t, swint_t           -> CustomImageModule_kf  (imagem)
+    - convnext_t_ne, swint_t_ne     -> CustomImageCSVModule_kf (imagem + vetor SSN)
+    - triple                        -> CustomImageCSVModule_kf (imagem + vetor SSN)
+    - vector                        -> CustomFeaturesFromFoldersModule_kf (só vetor SSN)
     """
     tmodel = h["TMODEL"]
 
@@ -184,17 +179,20 @@ def build_datamodule(h, n_splits: int, fold_idx: int):
         )
         return dm, "features_only"
 
-    raise ValueError(f"TMODEL '{tmodel}' não reconhecido para DataModule.")
+    raise ValueError(f"TMODEL '{tmodel}' não reconhecido em build_datamodule().")
 
 
 def build_model(h, dm_type, dm=None):
     """
-    Cria o LightningModule certo a partir de TMODEL, usando os hiperparâmetros
-    do YAML. Ajusta assinatura pra cada classe do model.py.
+    Cria a LightningModule correta conforme TMODEL.
+    - convnext_t, swint_t           -> CustomModel
+    - convnext_t_ne, swint_t_ne     -> CustomEnsembleModel (backbone + SSN)
+    - triple                        -> CustomModelTriple   (ConvNeXt+Swin+SSN)
+    - vector                        -> CustomFeaturesOnlyModel (só SSN)
     """
     tmodel = h["TMODEL"]
 
-    # normaliza optimizer_momentum pra tupla
+    # normaliza optimizer_momentum (às vezes é float, às vezes lista)
     opt_mom = h["OPTIMIZER_MOMENTUM"]
     if isinstance(opt_mom, (int, float)):
         opt_mom = (opt_mom, 0.999)
@@ -215,18 +213,15 @@ def build_model(h, dm_type, dm=None):
     )
 
     if tmodel in ["convnext_t", "swint_t"]:
-        # backbone puro (imagem)
         return CustomModel(
             tmodel=tmodel,
             **common_kwargs,
         )
 
     if tmodel in ["convnext_t_ne", "swint_t_ne"]:
-        # imagem + vetor SSN
         assert dm is not None, "Preciso do datamodule pra inferir features_dim."
         features_dim = infer_features_dim_from_dm(dm)
-
-        # repara: CustomEnsembleModel espera tmodel sem o sufixo "_ne"
+        # CustomEnsembleModel espera tmodel sem sufixo "_ne"
         return CustomEnsembleModel(
             tmodel=tmodel.replace("_ne", ""),
             features_dim=features_dim,
@@ -234,10 +229,8 @@ def build_model(h, dm_type, dm=None):
         )
 
     if tmodel == "triple":
-        # ConvNeXt + Swin + SSN
         assert dm is not None, "Preciso do datamodule pra inferir features_dim."
         features_dim = infer_features_dim_from_dm(dm)
-
         return CustomModelTriple(
             name_dataset=h["NAME_DATASET"],
             shape=h["SHAPE"],
@@ -253,7 +246,6 @@ def build_model(h, dm_type, dm=None):
         )
 
     if tmodel == "vector":
-        # só vetor SSN
         return CustomFeaturesOnlyModel(
             name_dataset=h["NAME_DATASET"],
             shape=h["SHAPE"],
@@ -268,58 +260,220 @@ def build_model(h, dm_type, dm=None):
             layer_scale=h["LAYER_SCALE"],
         )
 
-    raise ValueError(f"TMODEL '{tmodel}' não suportado em build_model.")
+    raise ValueError(f"TMODEL '{tmodel}' não suportado em build_model().")
 
 
-def benchmark_once(h, fold_idx):
+# -------------------------------------------------
+# estatística e salvamento
+# -------------------------------------------------
+
+def mean_std(values):
+    """Retorna (média, desvio_amostral) ignorando None."""
+    vals = [v for v in values if v is not None]
+    if len(vals) == 0:
+        return (None, None)
+    if len(vals) == 1:
+        return (float(vals[0]), 0.0)
+    arr = np.array(vals, dtype=float)
+    return (float(np.mean(arr)), float(np.std(arr, ddof=1)))
+
+
+def aggregate_reports(reports, dataset_name, tmodel_name):
     """
-    Treina 1 época só em UM fold, mede custo de treino e teste,
-    e salva tudo em /Documentos/projeto/treinamentos/estatisticas/<dataset>_<tmodel>/fold_<fold>/
+    Recebe lista de 'report' (um por fold) e agrega:
+    - tempos médios
+    - uso de memória médio
+    - accuracy média ± std
+    - test_error média ± std  (1 - accuracy)
+    - métricas macro médias
+    """
+    train_times = []
+    test_times = []
+    inf_ms = []
+    throughput = []
+    gpu_train = []
+    gpu_test = []
+    ckpt_mb = []
+    nparams = []
+
+    acc_list = []
+    err_list = []
+    f1_list = []
+    prec_list = []
+    rec_list = []
+    loss_list = []
+
+    for r in reports:
+        train_times.append(r["train_time_sec"])
+        test_times.append(r["test_time_sec"])
+        inf_ms.append(r["test_inf_ms_per_sample"])
+        throughput.append(r["throughput_samples_per_sec"])
+        gpu_train.append(r["max_gpu_mem_mb_train"])
+        gpu_test.append(r["max_gpu_mem_mb_test"])
+        ckpt_mb.append(r["checkpoint_size_mb"])
+        nparams.append(r["num_params_trainable"])
+
+        tm = r["test_metrics"]
+        # LightningModules devem logar:
+        # test_accuracy, test_f1, test_precision, test_recall, test_loss
+        acc = tm.get("test_accuracy", None)
+        f1  = tm.get("test_f1", None)
+        prc = tm.get("test_precision", None)
+        rec = tm.get("test_recall", None)
+        los = tm.get("test_loss", None)
+
+        if acc is not None:
+            acc_list.append(acc)
+            err_list.append(1.0 - acc)
+        if f1 is not None:
+            f1_list.append(f1)
+        if prc is not None:
+            prec_list.append(prc)
+        if rec is not None:
+            rec_list.append(rec)
+        if los is not None:
+            loss_list.append(los)
+
+    agg = {
+        "dataset": dataset_name,
+        "tmodel": tmodel_name,
+        "num_folds_ok": len(reports),
+
+        # custo computacional
+        "train_time_sec_mean_std": mean_std(train_times),
+        "test_time_sec_mean_std": mean_std(test_times),
+        "inf_ms_per_sample_mean_std": mean_std(inf_ms),
+        "throughput_samples_per_sec_mean_std": mean_std(throughput),
+        "max_gpu_mem_mb_train_mean_std": mean_std(gpu_train),
+        "max_gpu_mem_mb_test_mean_std": mean_std(gpu_test),
+        "checkpoint_size_mb_mean_std": mean_std(ckpt_mb),
+        "num_params_trainable_mean_std": mean_std(nparams),
+
+        # desempenho
+        "test_accuracy_mean_std": mean_std(acc_list),
+        "test_error_mean_std": mean_std(err_list),
+        "test_f1_mean_std": mean_std(f1_list),
+        "test_precision_mean_std": mean_std(prec_list),
+        "test_recall_mean_std": mean_std(rec_list),
+        "test_loss_mean_std": mean_std(loss_list),
+    }
+    return agg
+
+
+def write_model_resumo(run_dir, agg):
+    """
+    Salva resumo.txt dentro de estatisticas/<dataset>_<tmodel>/,
+    contendo médias ± std agregadas nos folds.
+    """
+    os.makedirs(run_dir, exist_ok=True)
+    resumo_path = os.path.join(run_dir, "resumo.txt")
+
+    def fmt_pair(pair):
+        if pair is None or pair[0] is None:
+            return "N/A"
+        m, s = pair
+        return f"{m:.6f} ± {s:.6f}"
+
+    with open(resumo_path, "w") as f:
+        f.write(f"=== RESUMO {agg['dataset']} / {agg['tmodel']} ===\n")
+        f.write(f"Folds válidos: {agg['num_folds_ok']}\n\n")
+
+        f.write("== Desempenho de teste ==\n")
+        f.write(f"Acurácia (mean ± std): {fmt_pair(agg['test_accuracy_mean_std'])}\n")
+        f.write(f"Test error (1-acc) (mean ± std): {fmt_pair(agg['test_error_mean_std'])}\n")
+        f.write(f"F1 macro (mean ± std): {fmt_pair(agg['test_f1_mean_std'])}\n")
+        f.write(f"Precision macro (mean ± std): {fmt_pair(agg['test_precision_mean_std'])}\n")
+        f.write(f"Recall macro (mean ± std): {fmt_pair(agg['test_recall_mean_std'])}\n")
+        f.write(f"Loss (mean ± std): {fmt_pair(agg['test_loss_mean_std'])}\n\n")
+
+        f.write("== Custo computacional ==\n")
+        f.write(f"Tempo treino s (mean ± std): {fmt_pair(agg['train_time_sec_mean_std'])}\n")
+        f.write(f"Tempo teste s (mean ± std): {fmt_pair(agg['test_time_sec_mean_std'])}\n")
+        f.write(f"Latência ms/img (mean ± std): {fmt_pair(agg['inf_ms_per_sample_mean_std'])}\n")
+        f.write(f"Throughput img/s (mean ± std): {fmt_pair(agg['throughput_samples_per_sec_mean_std'])}\n")
+        f.write(f"GPU train MB pico (mean ± std): {fmt_pair(agg['max_gpu_mem_mb_train_mean_std'])}\n")
+        f.write(f"GPU test MB pico (mean ± std): {fmt_pair(agg['max_gpu_mem_mb_test_mean_std'])}\n")
+        f.write(f"Tamanho ckpt MB (mean ± std): {fmt_pair(agg['checkpoint_size_mb_mean_std'])}\n")
+        f.write(f"#params treináveis (mean ± std): {fmt_pair(agg['num_params_trainable_mean_std'])}\n")
+
+
+def write_dataset_table(base_save_dir, dataset_name, dataset_results):
+    """
+    Gera um arquivo <dataset>_tabela_resumo.txt dentro de estatisticas/
+    listando para cada tmodel:
+        - Accuracy mean ± std
+        - Test error mean ± std
+        - Latência ms/img mean ± std
+        - Tamanho ckpt MB mean ± std
+    """
+    tabela_path = os.path.join(base_save_dir, f"{dataset_name}_tabela_resumo.txt")
+
+    pretty_name = {
+        "convnext_t":      "ConvNeXt",
+        "convnext_t_ne":   "ConvNeXt+SSN",
+        "swint_t":         "Swin",
+        "swint_t_ne":      "Swin+SSN",
+        "triple":          "Triple (C+S+SSN)",
+        "vector":          "SSN (vector)",
+    }
+
+    def fmt_pair(pair):
+        if pair is None or pair[0] is None:
+            return "N/A"
+        m, s = pair
+        return f"{m:.6f} ± {s:.6f}"
+
+    with open(tabela_path, "w") as f:
+        f.write(f"TABELA RESUMO ({dataset_name})\n")
+        f.write("Modelo ; Accuracy (mean±std) ; TestError (mean±std) ; Latência ms/img (mean±std) ; Ckpt MB (mean±std)\n")
+        for tmodel, agg in dataset_results.items():
+            f.write(
+                f"{pretty_name.get(tmodel,tmodel)} ; "
+                f"{fmt_pair(agg['test_accuracy_mean_std'])} ; "
+                f"{fmt_pair(agg['test_error_mean_std'])} ; "
+                f"{fmt_pair(agg['inf_ms_per_sample_mean_std'])} ; "
+                f"{fmt_pair(agg['checkpoint_size_mb_mean_std'])}\n"
+            )
+
+
+# -------------------------------------------------
+# núcleo: benchmark de UM modelo em UM fold (1 época)
+# -------------------------------------------------
+
+def benchmark_single_fold(h, fold_idx, base_save_dir, seed=42):
+    """
+    Executa benchmark de UM modelo (h['TMODEL']) em UM fold.
+    - treina 1 época
+    - mede custo
+    - salva resultados brutos em estatisticas/<dataset>_<tmodel>/fold_<fold>/
+    - retorna um dict 'report' com tudo
     """
 
-    # ------------------------------------------------------------------
-    # Diretório base fixo pedido pelo usuário
-    # ------------------------------------------------------------------
-    base_save_dir = "/Documentos/projeto/treinamentos/estatisticas"
+    set_seeds(seed)
 
-    # Nome lógico "<dataset>_<tmodel>"
-    run_name = f"{h['NAME_DATASET']}_{h['TMODEL']}"
+    dataset_name = h["NAME_DATASET"]
+    tmodel_name = h["TMODEL"]
 
-    # Caminho dessa execução (modelo específico)
+    run_name = f"{dataset_name}_{tmodel_name}"
     run_dir = os.path.join(base_save_dir, run_name)
     os.makedirs(run_dir, exist_ok=True)
 
-    # Pasta do fold
     fold_dir = os.path.join(run_dir, f"fold_{fold_idx}")
     os.makedirs(fold_dir, exist_ok=True)
 
-    # Salvar hiperparâmetros usados (snapshot do YAML)
+    # snapshot dos hiperparâmetros
     with open(os.path.join(fold_dir, "hyperparams_used.json"), "w") as f:
         json.dump(h, f, indent=2, ensure_ascii=False)
 
-    # ------------------------------------------------------------------
-    # Monta datamodule pro fold
-    # ------------------------------------------------------------------
-    effective_n_splits = int(h.get("K_FOLDS", 5))
-
-    dm, dm_type = build_datamodule(
-        h,
-        n_splits=effective_n_splits,
-        fold_idx=fold_idx,
-    )
-
-    # prepara dados de treino/val
+    # datamodule
+    k_folds = int(h.get("K_FOLDS", 5))
+    dm, dm_type = build_datamodule(h, n_splits=k_folds, fold_idx=fold_idx)
     dm.setup(stage="fit")
 
-    # ------------------------------------------------------------------
-    # Monta o modelo Lightning
-    # ------------------------------------------------------------------
+    # modelo lightning
     model = build_model(h, dm_type, dm=dm)
 
-    # ------------------------------------------------------------------
-    # Callback pra salvar checkpoint "melhor" (pelo menor val_loss)
-    # Vamos salvar exatamente dentro de fold_dir
-    # ------------------------------------------------------------------
+    # callback: salva best checkpoint por menor val_loss
     ckpt_cb = ModelCheckpoint(
         dirpath=fold_dir,
         filename="best_model",
@@ -333,22 +487,16 @@ def benchmark_once(h, fold_idx):
         ckpt_cb,
     ]
 
-    # ------------------------------------------------------------------
-    # Trainer: forçar só 1 época.
-    # Ignoramos h["MAX_EPOCHS"] de propósito, porque aqui é benchmark.
-    # ------------------------------------------------------------------
     trainer = pl.Trainer(
         log_every_n_steps=10,
         accelerator=h["ACCELERATOR"],
         devices=h["DEVICES"],
         precision=h["PRECISION"],
-        max_epochs=1,  # <- 1 época para medir custo
+        max_epochs=1,  # só 1 época
         callbacks=callbacks,
     )
 
-    # ------------------------------------------------------------------
-    # Tempo de treino + pico de memória GPU no treino
-    # ------------------------------------------------------------------
+    # medir treino
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
 
@@ -360,9 +508,7 @@ def benchmark_once(h, fold_idx):
     if torch.cuda.is_available():
         max_gpu_mb_train = torch.cuda.max_memory_allocated() / (1024**2)
 
-    # ------------------------------------------------------------------
-    # Melhor checkpoint / época salva pelo callback
-    # ------------------------------------------------------------------
+    # info do best checkpoint
     best_model_path = ckpt_cb.best_model_path
     best_epoch = None
     try:
@@ -371,18 +517,13 @@ def benchmark_once(h, fold_idx):
     except Exception:
         pass
 
-    # ------------------------------------------------------------------
-    # Recarrega o best checkpoint pra validar/testar
-    # ------------------------------------------------------------------
+    # recarregar checkpoint pra medir validação/teste
     model = build_model(h, dm_type, dm=dm)
     model = model.load_from_checkpoint(best_model_path)
 
-    # Validação final (opcional, mas guardamos)
     val_metrics = trainer.validate(model, datamodule=dm, verbose=False)[0]
 
-    # ------------------------------------------------------------------
-    # Teste + métricas de inferência
-    # ------------------------------------------------------------------
+    # teste com tempo de inferência
     try:
         dm.setup(stage="test")
     except Exception:
@@ -405,9 +546,7 @@ def benchmark_once(h, fold_idx):
     inf_ms_per_sample = (test_time_sec * 1000.0 / n_test) if n_test > 0 else float("nan")
     throughput_samples_per_sec = (n_test / test_time_sec) if test_time_sec > 0 else float("nan")
 
-    # ------------------------------------------------------------------
-    # Tamanho do checkpoint e nº de parâmetros
-    # ------------------------------------------------------------------
+    # tamanho do checkpoint e nº de parâmetros
     checkpoint_size_mb = None
     if os.path.isfile(best_model_path):
         checkpoint_size_mb = os.path.getsize(best_model_path) / (1024**2)
@@ -416,12 +555,10 @@ def benchmark_once(h, fold_idx):
         p.numel() for p in model.parameters() if p.requires_grad
     )
 
-    # ------------------------------------------------------------------
-    # Monta dicionário final de estatísticas
-    # ------------------------------------------------------------------
+    # monta o relatório bruto
     report = {
-        "dataset": h["NAME_DATASET"],
-        "tmodel": h["TMODEL"],
+        "dataset": dataset_name,
+        "tmodel": tmodel_name,
         "fold_idx": fold_idx,
 
         "best_epoch": best_epoch,
@@ -441,59 +578,92 @@ def benchmark_once(h, fold_idx):
         "test_metrics": test_metrics,
     }
 
-    # ------------------------------------------------------------------
-    # Salvar benchmark_report.json (máquina lê)
-    # ------------------------------------------------------------------
-    json_path = os.path.join(fold_dir, "benchmark_report.json")
-    with open(json_path, "w") as f:
+    # salva bruto em JSON
+    with open(os.path.join(fold_dir, "benchmark_report.json"), "w") as f:
         json.dump(report, f, indent=2, ensure_ascii=False)
 
-    # ------------------------------------------------------------------
-    # Salvar benchmark_result.txt (humano lê / cola no artigo)
-    # ------------------------------------------------------------------
-    txt_path = os.path.join(fold_dir, "benchmark_result.txt")
-    with open(txt_path, "w") as f:
-        f.write("===== BENCHMARK REPORT =====\n")
+    # salva txt humano daquele fold
+    with open(os.path.join(fold_dir, "benchmark_result.txt"), "w") as f:
+        f.write("===== BENCHMARK REPORT (fold individual) =====\n")
         for k, v in report.items():
             f.write(f"{k}: {v}\n")
 
-    # print no console também, só pra feedback imediato
-    print("\n===== BENCHMARK REPORT =====")
-    print(f"(salvo em {txt_path})")
-    for k, v in report.items():
-        print(f"{k}: {v}")
-
+    print(f"[OK] {dataset_name}/{tmodel_name}/fold_{fold_idx} concluído.")
     return report
 
 
+# -------------------------------------------------
+# main: roda só config1.yaml em todos os modelos e folds
+# -------------------------------------------------
+
+def main():
+    # diretório base = onde este script está
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    BASE_SAVE_DIR = os.path.join(BASE_DIR, "estatisticas")
+    os.makedirs(BASE_SAVE_DIR, exist_ok=True)
+
+    # carrega APENAS config1.yaml
+    config_path = os.path.join(BASE_DIR, "config1.yaml")
+    h_base = load_hparams(config_path)
+
+    dataset_name = h_base["NAME_DATASET"]
+    k_folds = int(h_base.get("K_FOLDS", 5))
+
+    # modelos que queremos medir para esse dataset
+    TMODELS_TO_TRY = [
+        "vector",
+        "convnext_t",
+        "convnext_t_ne",
+        "swint_t",
+        "swint_t_ne",
+        "triple",
+    ]
+
+    SEED = 42  # seed fixa p/ benchmark
+
+    dataset_results = {}  # vai juntar o agregado de cada modelo
+
+    # loop por modelo
+    for tmodel_name in TMODELS_TO_TRY:
+        print(f"\n--- Dataset {dataset_name} | Modelo {tmodel_name} ---")
+
+        # clona config base e ajusta TMODEL
+        h_local = dict(h_base)
+        h_local["TMODEL"] = tmodel_name
+
+        model_reports = []
+
+        # roda todos os folds desse modelo
+        for fold_idx in range(k_folds):
+            try:
+                rep = benchmark_single_fold(
+                    h=h_local,
+                    fold_idx=fold_idx,
+                    base_save_dir=BASE_SAVE_DIR,
+                    seed=SEED,
+                )
+                model_reports.append(rep)
+            except Exception as e:
+                print(f"[WARN] Falhou {dataset_name}/{tmodel_name}/fold_{fold_idx}: {e}")
+
+        if not model_reports:
+            print(f"[SKIP] Nenhum fold rodou para {dataset_name}/{tmodel_name}.")
+            continue
+
+        # agrega estatísticas entre folds
+        agg = aggregate_reports(model_reports, dataset_name, tmodel_name)
+        dataset_results[tmodel_name] = agg
+
+        # salva resumo agregado por modelo
+        run_name = f"{dataset_name}_{tmodel_name}"
+        run_dir = os.path.join(BASE_SAVE_DIR, run_name)
+        write_model_resumo(run_dir, agg)
+
+    # salva tabela resumo geral do dataset
+    write_dataset_table(BASE_SAVE_DIR, dataset_name, dataset_results)
+
+    print("\n=== FINALIZADO. Resultados em treinamentos/estatisticas/ ===")
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--config",
-        type=str,
-        default="config1.yaml",
-        help="Arquivo YAML com hiperparâmetros (ex.: config1.yaml)."
-    )
-    parser.add_argument(
-        "--fold",
-        type=int,
-        default=0,
-        help="Fold que será usado para o benchmark (0..K_FOLDS-1)."
-    )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=42,
-        help="Seed (para reprodutibilidade)."
-    )
-
-    args = parser.parse_args()
-
-    # carrega hiperparâmetros
-    h = load_hparams(args.config)
-
-    # força semente
-    set_seeds(args.seed)
-
-    # roda benchmark no fold escolhido
-    benchmark_once(h, fold_idx=args.fold)
+    main()
