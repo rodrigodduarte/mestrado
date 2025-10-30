@@ -1,46 +1,37 @@
 #!/usr/bin/env python3
 # extracao_all.py
 #
-# Executa benchmark (1 época por fold) para TODOS os modelos definidos,
-# mas usando APENAS o config1.yaml.
+# Benchmark automático:
+# - Usa SOMENTE treinamentos/config1.yaml
+# - Para cada modelo profundo (ConvNeXt, Swin, ConvNeXt+SSN, Swin+SSN, Triple)
+# - Para cada fold (0..K_FOLDS-1)
+#   - treina 1 época só (suficiente pra medir custo computacional)
+#   - mede tempo de treino, tempo de teste, latência média, throughput
+#   - mede pico de memória GPU treino/teste
+#   - mede tamanho do checkpoint e nº de parâmetros
+#   - mede métricas de teste (accuracy, f1, precision, recall, loss)
+#   - salva tudo em treinamentos/estatisticas/<dataset>_<modelo>/fold_<k>/
 #
-# Para cada modelo em TMODELS_TO_TRY e para cada fold:
-#   - treina 1 época
-#   - mede tempo de treino, tempo de teste
-#   - mede latência média por imagem, throughput, pico de memória GPU
-#   - mede tamanho do checkpoint, nº de parâmetros
-#   - coleta métricas de teste (acc, f1, precision, recall, loss)
-#   - salva estatísticas no diretório treinamentos/estatisticas/
+# Depois:
+# - agrega por modelo (média ± std entre folds)
+# - escreve resumo.txt por modelo
+# - escreve <dataset>_tabela_resumo.txt com todos os modelos
 #
-# Depois agrega por modelo (média ± std entre folds) e gera:
-#   - resumo.txt por modelo
-#   - <dataset>_tabela_resumo.txt para o dataset inteiro
-#
-# Estrutura de saída:
-# treinamentos/
-#   estatisticas/
-#     <dataset>_<tmodel>/
-#       fold_0/
-#         best_model.ckpt
-#         hyperparams_used.json
-#         benchmark_report.json
-#         benchmark_result.txt
-#       fold_1/
-#       ...
-#       resumo.txt
-#     <dataset>_tabela_resumo.txt
-#
-# Requisitos:
-# - Este script está no diretório treinamentos/
-# - config1.yaml está em treinamentos/config1.yaml
-# - dataset.py, model.py, callbacks.py estão em treinamentos/
-# - estatisticas/ já existe (ou o script vai criar)
+# IMPORTANTE:
+# - NÃO roda o modelo "vector" (SSN puro). Ele será medido separadamente depois.
 #
 # Execução:
+#   cd treinamentos
 #   python extracao_all.py
 #
-# Obs: cada fold roda 1 época, então é um benchmark rápido, não um treino final.
-
+# Estrutura esperada no repo:
+# treinamentos/
+#   config1.yaml
+#   dataset.py
+#   model.py
+#   callbacks.py
+#   estatisticas/   (pasta existe ou será criada)
+#   extracao_all.py (este script)
 
 import os
 import time
@@ -52,17 +43,17 @@ import torch
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import TQDMProgressBar, ModelCheckpoint
 
-# importa suas implementações locais
+# importa implementações locais
 from model import (
     CustomModel,
     CustomEnsembleModel,
     CustomModelTriple,
-    CustomFeaturesOnlyModel,
+    CustomFeaturesOnlyModel,  # continua definido aqui mas NÃO será chamado nesse script
 )
 from dataset import (
     CustomImageModule_kf,
     CustomImageCSVModule_kf,
-    # CustomFeaturesFromFoldersModule_kf será importado dinamicamente se precisar
+    # CustomFeaturesFromFoldersModule_kf será importado dinamicamente se/quando usado
 )
 
 
@@ -135,10 +126,14 @@ def infer_features_dim_from_dm(dm):
 def build_datamodule(h, n_splits: int, fold_idx: int):
     """
     Cria o DataModule certo de acordo com o TMODEL.
-    - convnext_t, swint_t           -> CustomImageModule_kf  (imagem)
-    - convnext_t_ne, swint_t_ne     -> CustomImageCSVModule_kf (imagem + vetor SSN)
-    - triple                        -> CustomImageCSVModule_kf (imagem + vetor SSN)
-    - vector                        -> CustomFeaturesFromFoldersModule_kf (só vetor SSN)
+
+    - convnext_t, swint_t:
+        imagem apenas -> CustomImageModule_kf
+    - convnext_t_ne, swint_t_ne, triple:
+        imagem + vetor SSN -> CustomImageCSVModule_kf
+    - vector:
+        só vetor SSN -> CustomFeaturesFromFoldersModule_kf
+        (não será rodado neste script, mas deixo a lógica preparada)
     """
     tmodel = h["TMODEL"]
 
@@ -167,6 +162,7 @@ def build_datamodule(h, n_splits: int, fold_idx: int):
         return dm, "image_plus_features"
 
     if tmodel in ["vector"]:
+        # NÃO vamos chamar isso agora, mas mantemos pronto pro futuro.
         from dataset import CustomFeaturesFromFoldersModule_kf
         dm = CustomFeaturesFromFoldersModule_kf(
             train_dir=h["TRAIN_DIR"],
@@ -189,6 +185,7 @@ def build_model(h, dm_type, dm=None):
     - convnext_t_ne, swint_t_ne     -> CustomEnsembleModel (backbone + SSN)
     - triple                        -> CustomModelTriple   (ConvNeXt+Swin+SSN)
     - vector                        -> CustomFeaturesOnlyModel (só SSN)
+      (vector não será usado aqui agora)
     """
     tmodel = h["TMODEL"]
 
@@ -221,7 +218,7 @@ def build_model(h, dm_type, dm=None):
     if tmodel in ["convnext_t_ne", "swint_t_ne"]:
         assert dm is not None, "Preciso do datamodule pra inferir features_dim."
         features_dim = infer_features_dim_from_dm(dm)
-        # CustomEnsembleModel espera tmodel sem sufixo "_ne"
+        # CustomEnsembleModel espera tmodel sem o sufixo "_ne"
         return CustomEnsembleModel(
             tmodel=tmodel.replace("_ne", ""),
             features_dim=features_dim,
@@ -246,6 +243,7 @@ def build_model(h, dm_type, dm=None):
         )
 
     if tmodel == "vector":
+        # não vai ser chamado neste script, mas deixo pra referência futura
         return CustomFeaturesOnlyModel(
             name_dataset=h["NAME_DATASET"],
             shape=h["SHAPE"],
@@ -264,7 +262,7 @@ def build_model(h, dm_type, dm=None):
 
 
 # -------------------------------------------------
-# estatística e salvamento
+# estatística e salvamento (agregação pós-fold)
 # -------------------------------------------------
 
 def mean_std(values):
@@ -314,8 +312,7 @@ def aggregate_reports(reports, dataset_name, tmodel_name):
         nparams.append(r["num_params_trainable"])
 
         tm = r["test_metrics"]
-        # LightningModules devem logar:
-        # test_accuracy, test_f1, test_precision, test_recall, test_loss
+        # seu LightningModule deve logar essas métricas no test_step
         acc = tm.get("test_accuracy", None)
         f1  = tm.get("test_f1", None)
         prc = tm.get("test_precision", None)
@@ -400,7 +397,7 @@ def write_model_resumo(run_dir, agg):
 def write_dataset_table(base_save_dir, dataset_name, dataset_results):
     """
     Gera um arquivo <dataset>_tabela_resumo.txt dentro de estatisticas/
-    listando para cada tmodel:
+    listando para cada tmodel (exceto vector, que não rodamos aqui):
         - Accuracy mean ± std
         - Test error mean ± std
         - Latência ms/img mean ± std
@@ -408,13 +405,14 @@ def write_dataset_table(base_save_dir, dataset_name, dataset_results):
     """
     tabela_path = os.path.join(base_save_dir, f"{dataset_name}_tabela_resumo.txt")
 
+    # nomes mais bonitos pra aparecer na tabela final
     pretty_name = {
         "convnext_t":      "ConvNeXt",
         "convnext_t_ne":   "ConvNeXt+SSN",
         "swint_t":         "Swin",
         "swint_t_ne":      "Swin+SSN",
         "triple":          "Triple (C+S+SSN)",
-        "vector":          "SSN (vector)",
+        # "vector":        "SSN (vector)"  # propositalmente fora
     }
 
     def fmt_pair(pair):
@@ -427,6 +425,9 @@ def write_dataset_table(base_save_dir, dataset_name, dataset_results):
         f.write(f"TABELA RESUMO ({dataset_name})\n")
         f.write("Modelo ; Accuracy (mean±std) ; TestError (mean±std) ; Latência ms/img (mean±std) ; Ckpt MB (mean±std)\n")
         for tmodel, agg in dataset_results.items():
+            # pula vector se ele estiver acidentalmente no dict
+            if tmodel == "vector":
+                continue
             f.write(
                 f"{pretty_name.get(tmodel,tmodel)} ; "
                 f"{fmt_pair(agg['test_accuracy_mean_std'])} ; "
@@ -461,7 +462,7 @@ def benchmark_single_fold(h, fold_idx, base_save_dir, seed=42):
     fold_dir = os.path.join(run_dir, f"fold_{fold_idx}")
     os.makedirs(fold_dir, exist_ok=True)
 
-    # snapshot dos hiperparâmetros
+    # snapshot dos hiperparâmetros usados
     with open(os.path.join(fold_dir, "hyperparams_used.json"), "w") as f:
         json.dump(h, f, indent=2, ensure_ascii=False)
 
@@ -492,7 +493,7 @@ def benchmark_single_fold(h, fold_idx, base_save_dir, seed=42):
         accelerator=h["ACCELERATOR"],
         devices=h["DEVICES"],
         precision=h["PRECISION"],
-        max_epochs=1,  # só 1 época
+        max_epochs=1,  # só 1 época para benchmark
         callbacks=callbacks,
     )
 
@@ -593,7 +594,7 @@ def benchmark_single_fold(h, fold_idx, base_save_dir, seed=42):
 
 
 # -------------------------------------------------
-# main: roda só config1.yaml em todos os modelos e folds
+# main: usa apenas config1.yaml e ignora "vector"
 # -------------------------------------------------
 
 def main():
@@ -602,16 +603,16 @@ def main():
     BASE_SAVE_DIR = os.path.join(BASE_DIR, "estatisticas")
     os.makedirs(BASE_SAVE_DIR, exist_ok=True)
 
-    # carrega APENAS config1.yaml
+    # carrega SOMENTE config1.yaml
     config_path = os.path.join(BASE_DIR, "config1.yaml")
     h_base = load_hparams(config_path)
 
     dataset_name = h_base["NAME_DATASET"]
     k_folds = int(h_base.get("K_FOLDS", 5))
 
-    # modelos que queremos medir para esse dataset
+    # modelos profundos que queremos comparar agora
+    # (vector / SSN puro fica de fora de propósito)
     TMODELS_TO_TRY = [
-        "vector",
         "convnext_t",
         "convnext_t_ne",
         "swint_t",
@@ -621,7 +622,7 @@ def main():
 
     SEED = 42  # seed fixa p/ benchmark
 
-    dataset_results = {}  # vai juntar o agregado de cada modelo
+    dataset_results = {}  # agregado por modelo
 
     # loop por modelo
     for tmodel_name in TMODELS_TO_TRY:
