@@ -551,6 +551,7 @@ def benchmark_single_fold(h, fold_idx, base_save_dir, seed=42):
 
     # Trainer SEM checkpoint callback
     trainer = pl.Trainer(
+        logger=False,
         log_every_n_steps=10,
         accelerator=h["ACCELERATOR"],
         devices=h["DEVICES"],
