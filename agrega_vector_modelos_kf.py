@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-agrega_vector_modelos_kf.py
-- Passa por modelos_kf/*_vector/seed_*/fold_*/
-- Converte resultados_fold.txt -> benchmark_result.txt (padrão já utilizado)
-- Gera um arquivo único com tudo do modelo vector:
-  /home/rodrigoduarte/Documentos/projeto/treinamentos/estatisticas/vector_agregado_desempenho.txt
+agrega_vector_modelos_kf.py  (v2 - saída padronizada)
+- Percorre modelos_kf/*_vector/seed_*/fold_*
+- Converte resultados_fold.txt -> benchmark_result.txt (padrão interno)
+- Para cada dataset *_vector, cria:
+    /home/.../treinamentos/estatisticas/<dataset>_custo/<dataset>_desempenho.txt
+  no formato humano (mean ± std) igual ao 'desempenhos_vector_todos.txt' mostrado.
+- Gera o consolidate:
+    /home/.../treinamentos/estatisticas/desempenhos_vector_todos.txt
 """
 
 import argparse
@@ -13,8 +16,41 @@ import json
 import re
 from pathlib import Path
 from datetime import datetime
+from statistics import mean, stdev, StatisticsError
 
-# ========= Helpers =========
+# ========= Helpers numéricos =========
+
+def _to_float(x):
+    if x is None:
+        return None
+    try:
+        return float(x)
+    except Exception:
+        try:
+            return float(str(x).strip())
+        except Exception:
+            return None
+
+def mstd(vals):
+    """Retorna (média, std) para lista de floats (ignorando None).
+       Se lista vazia: retorna (None, None). Se 1 elemento: std=0.0."""
+    clean = [v for v in map(_to_float, vals) if v is not None]
+    if not clean:
+        return (None, None)
+    if len(clean) == 1:
+        return (clean[0], 0.0)
+    try:
+        return (mean(clean), stdev(clean))
+    except StatisticsError:
+        return (mean(clean), 0.0)
+
+def fmt(m, s, nd=6):
+    """Formata 'm ± s' com nd casas; se None, retorna 'N/A'."""
+    if m is None:
+        return "N/A"
+    return f"{m:.{nd}f} ± {s:.{nd}f}"
+
+# ========= Parsing =========
 
 def safe_float(x):
     try:
@@ -23,10 +59,6 @@ def safe_float(x):
         return None
 
 def parse_resultados_fold(txt_path: Path) -> dict:
-    """
-    Lê resultados_fold.txt e retorna um dicionário com os campos relevantes.
-    Aceita linhas no formato 'chave: valor' e JSON nas chaves *_json e listas.
-    """
     data = {
         "Seed": None,
         "Fold": None,
@@ -35,8 +67,15 @@ def parse_resultados_fold(txt_path: Path) -> dict:
         "test_time_sec": None,
         "test_inf_ms_per_sample": None,
         "throughput_samples_per_sec": None,
+        # Alguns logs têm apenas um pico de memória
         "max_gpu_mem_mb": None,
+        # Se existirem separados, aproveitamos:
+        "max_gpu_mem_mb_train": None,
+        "max_gpu_mem_mb_test": None,
+        # Tamanho do checkpoint (proxy p/ tamanho do modelo)
         "best_checkpoint_size_mb": None,
+        # #params se aparecer em algum log
+        "num_params_trainable": None,
         "val_metrics": {},
         "test_metrics": {},
         "balance_mode": None,
@@ -66,15 +105,16 @@ def parse_resultados_fold(txt_path: Path) -> dict:
                 "test_inf_ms_per_sample",
                 "throughput_samples_per_sec",
                 "max_gpu_mem_mb",
+                "max_gpu_mem_mb_train",
+                "max_gpu_mem_mb_test",
                 "best_checkpoint_size_mb",
+                "num_params_trainable",
             }:
                 data[key] = safe_float(value)
             elif key == "val_metrics_json":
-                # value é JSON após o ":", então já está em 'value'
                 try:
                     data["val_metrics"] = json.loads(value)
                 except Exception:
-                    # tenta achar JSON usando regex (caso tenha comentários à direita)
                     m = re.search(r"\{.*\}$", line)
                     if m:
                         try:
@@ -94,7 +134,6 @@ def parse_resultados_fold(txt_path: Path) -> dict:
             elif key == "balance_mode":
                 data["balance_mode"] = value
             elif key == "class_weights":
-                # lista no formato [ ... ]
                 try:
                     data["class_weights"] = json.loads(value.replace("'", '"'))
                 except Exception:
@@ -113,10 +152,6 @@ def write_benchmark_result_txt(
     info: dict,
     force: bool = False,
 ):
-    """
-    Escreve benchmark_result.txt no padrão já usado.
-    Se existir e force=False, não sobrescreve.
-    """
     if out_path.exists() and not force:
         return False
 
@@ -132,12 +167,18 @@ def write_benchmark_result_txt(
     lines.append(f"test_time_sec: {info.get('test_time_sec')}")
     lines.append(f"test_inf_ms_per_sample: {info.get('test_inf_ms_per_sample')}")
     lines.append(f"throughput_samples_per_sec: {info.get('throughput_samples_per_sec')}")
-    # No vector, só há 'max_gpu_mem_mb' (um valor). Mantemos esse campo.
+    # Memória:
+    if info.get("max_gpu_mem_mb_train") is not None:
+        lines.append(f"max_gpu_mem_mb_train: {info.get('max_gpu_mem_mb_train')}")
+    if info.get("max_gpu_mem_mb_test") is not None:
+        lines.append(f"max_gpu_mem_mb_test: {info.get('max_gpu_mem_mb_test')}")
     if info.get("max_gpu_mem_mb") is not None:
         lines.append(f"max_gpu_mem_mb: {info.get('max_gpu_mem_mb')}")
-    # Tamanho do checkpoint (equivalente a model_size do convnext)
+    # Tamanho e #params:
     if info.get("best_checkpoint_size_mb") is not None:
         lines.append(f"best_checkpoint_size_mb: {info.get('best_checkpoint_size_mb')}")
+    if info.get("num_params_trainable") is not None:
+        lines.append(f"num_params_trainable: {int(info.get('num_params_trainable'))}")
     # Métricas
     vm = info.get("val_metrics") or {}
     tm = info.get("test_metrics") or {}
@@ -157,15 +198,21 @@ def write_benchmark_result_txt(
     return True
 
 def gather_from_benchmark_result(txt_path: Path) -> dict:
-    """
-    Lê benchmark_result.txt e extrai campos básicos para o agregadão final.
-    """
     out = {
         "dataset": None,
         "tmodel": None,
         "seed": None,
         "fold_idx": None,
         "best_epoch": None,
+        "train_time_sec": None,
+        "test_time_sec": None,
+        "test_inf_ms_per_sample": None,
+        "throughput_samples_per_sec": None,
+        "max_gpu_mem_mb_train": None,
+        "max_gpu_mem_mb_test": None,
+        "max_gpu_mem_mb": None,
+        "best_checkpoint_size_mb": None,
+        "num_params_trainable": None,
         "val_accuracy": None,
         "val_loss": None,
         "test_accuracy": None,
@@ -173,10 +220,6 @@ def gather_from_benchmark_result(txt_path: Path) -> dict:
         "test_precision": None,
         "test_recall": None,
         "test_loss": None,
-        "test_inf_ms_per_sample": None,
-        "throughput_samples_per_sec": None,
-        "max_gpu_mem_mb": None,
-        "best_checkpoint_size_mb": None,
     }
     if not txt_path.is_file():
         return out
@@ -191,9 +234,7 @@ def gather_from_benchmark_result(txt_path: Path) -> dict:
             key = key.strip()
             value = value.strip()
 
-            if key in out:
-                out[key] = value
-            elif key == "dataset":
+            if key == "dataset":
                 out["dataset"] = value
             elif key == "tmodel":
                 out["tmodel"] = value
@@ -202,7 +243,19 @@ def gather_from_benchmark_result(txt_path: Path) -> dict:
             elif key == "fold_idx":
                 out["fold_idx"] = value
             elif key == "epoch_trained":
-                out["best_epoch"] = value
+                out["best_epoch"] = _to_float(value)
+            elif key in {
+                "train_time_sec",
+                "test_time_sec",
+                "test_inf_ms_per_sample",
+                "throughput_samples_per_sec",
+                "max_gpu_mem_mb_train",
+                "max_gpu_mem_mb_test",
+                "max_gpu_mem_mb",
+                "best_checkpoint_size_mb",
+                "num_params_trainable",
+            }:
+                out[key] = _to_float(value)
             elif key == "val_metrics_json":
                 try:
                     vm = json.loads(value)
@@ -213,60 +266,161 @@ def gather_from_benchmark_result(txt_path: Path) -> dict:
                     tm = json.loads(value)
                 except Exception:
                     pass
-            elif key == "test_inf_ms_per_sample":
-                out["test_inf_ms_per_sample"] = value
-            elif key == "throughput_samples_per_sec":
-                out["throughput_samples_per_sec"] = value
-            elif key == "max_gpu_mem_mb":
-                out["max_gpu_mem_mb"] = value
-            elif key == "best_checkpoint_size_mb":
-                out["best_checkpoint_size_mb"] = value
 
-    # Acopla métricas
     if isinstance(vm, dict):
-        out["val_accuracy"] = vm.get("val_accuracy")
-        out["val_loss"] = vm.get("val_loss")
+        out["val_accuracy"] = _to_float(vm.get("val_accuracy"))
+        out["val_loss"] = _to_float(vm.get("val_loss"))
     if isinstance(tm, dict):
-        out["test_accuracy"] = tm.get("test_accuracy")
-        out["test_f1"] = tm.get("test_f1")
-        out["test_precision"] = tm.get("test_precision")
-        out["test_recall"] = tm.get("test_recall")
-        out["test_loss"] = tm.get("test_loss")
+        out["test_accuracy"] = _to_float(tm.get("test_accuracy"))
+        out["test_f1"] = _to_float(tm.get("test_f1"))
+        out["test_precision"] = _to_float(tm.get("test_precision"))
+        out["test_recall"] = _to_float(tm.get("test_recall"))
+        out["test_loss"] = _to_float(tm.get("test_loss"))
 
     return out
+
+# ========= Escrita no formato “desejado” =========
+
+SEPLONG = "-" * 72
+SEPMED  = "-" * 64
+
+def write_dataset_human_report(dst_path: Path, dataset: str, rows: list):
+    """Escreve <dataset>_desempenho.txt no formato desejado."""
+    # Coletas
+    acc = [r["test_accuracy"] for r in rows if r.get("test_accuracy") is not None]
+    err = [1.0 - a for a in acc] if acc else []
+    f1  = [r["test_f1"] for r in rows if r.get("test_f1") is not None]
+    pre = [r["test_precision"] for r in rows if r.get("test_precision") is not None]
+    rec = [r["test_recall"] for r in rows if r.get("test_recall") is not None]
+    los = [r["test_loss"] for r in rows if r.get("test_loss") is not None]
+
+    trn = [r["train_time_sec"] for r in rows if r.get("train_time_sec") is not None]
+    tst = [r["test_time_sec"] for r in rows if r.get("test_time_sec") is not None]
+    lat = [r["test_inf_ms_per_sample"] for r in rows if r.get("test_inf_ms_per_sample") is not None]
+    thr = [r["throughput_samples_per_sec"] for r in rows if r.get("throughput_samples_per_sec") is not None]
+
+    gpu_tr = [r["max_gpu_mem_mb_train"] for r in rows if r.get("max_gpu_mem_mb_train") is not None]
+    gpu_te = [r["max_gpu_mem_mb_test"] for r in rows if r.get("max_gpu_mem_mb_test") is not None]
+    gpu_1  = [r["max_gpu_mem_mb"] for r in rows if r.get("max_gpu_mem_mb") is not None]
+
+    ckpt = [r["best_checkpoint_size_mb"] for r in rows if r.get("best_checkpoint_size_mb") is not None]
+    npar = [r["num_params_trainable"] for r in rows if r.get("num_params_trainable") is not None]
+
+    m_acc, s_acc = mstd(acc)
+    m_err, s_err = mstd(err)
+    m_f1,  s_f1  = mstd(f1)
+    m_pre, s_pre = mstd(pre)
+    m_rec, s_rec = mstd(rec)
+    m_los, s_los = mstd(los)
+
+    m_trn, s_trn = mstd(trn)
+    m_tst, s_tst = mstd(tst)
+    m_lat, s_lat = mstd(lat)
+    m_thr, s_thr = mstd(thr)
+
+    m_gtr, s_gtr = mstd(gpu_tr)
+    m_gte, s_gte = mstd(gpu_te)
+    m_gpu, s_gpu = mstd(gpu_1)
+
+    m_ckp, s_ckp = mstd(ckpt)
+    m_npa, s_npa = mstd(npar)
+
+    lines = []
+    lines.append(f"=== {dataset} / vector ===")
+    lines.append("== Desempenho de teste ==")
+    lines.append(f"Acurácia (mean ± std): {fmt(m_acc, s_acc)}")
+    lines.append(f"Test error (1-acc) (mean ± std): {fmt(m_err, s_err)}")
+    lines.append(f"F1 macro (mean ± std): {fmt(m_f1, s_f1)}")
+    lines.append(f"Precision macro (mean ± std): {fmt(m_pre, s_pre)}")
+    lines.append(f"Recall macro (mean ± std): {fmt(m_rec, s_rec)}")
+    lines.append(f"Loss (mean ± std): {fmt(m_los, s_los)}")
+    lines.append("")
+    lines.append(SEPMED)
+    lines.append("")
+    lines.append("== Custo computacional ==")
+    lines.append(f"Tempo treino s (mean ± std): {fmt(m_trn, s_trn)}")
+    lines.append(f"Tempo teste s (mean ± std): {fmt(m_tst, s_tst)}")
+    lines.append(f"Latência ms/img (mean ± std): {fmt(m_lat, s_lat)}")
+    lines.append(f"Throughput img/s (mean ± std): {fmt(m_thr, s_thr)}")
+
+    # Memória: imprime condicionando ao que existe
+    if m_gtr is not None:
+        lines.append(f"GPU train MB pico (mean ± std): {fmt(m_gtr, s_gtr)}")
+    if m_gte is not None:
+        lines.append(f"GPU test MB pico (mean ± std): {fmt(m_gte, s_gte)}")
+    if m_gtr is None and m_gte is None and m_gpu is not None:
+        lines.append(f"GPU MB pico (mean ± std): {fmt(m_gpu, s_gpu)}")
+
+    lines.append(f"Tamanho do modelo MB (mean ± std): {fmt(m_ckp, s_ckp)}")
+    if m_npa is not None:
+        lines.append(f"#params treináveis (mean ± std): {fmt(m_npa, s_npa)}")
+
+    dst_path.parent.mkdir(parents=True, exist_ok=True)
+    dst_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+def append_to_all(all_path: Path, dataset: str, fonte_path: Path):
+    """Adiciona bloco com cabeçalho + (fonte) + conteúdo do arquivo do dataset ao consolidado."""
+    all_path.parent.mkdir(parents=True, exist_ok=True)
+    existing = all_path.read_text(encoding="utf-8") if all_path.exists() else ""
+    block = []
+
+    block.append(f"=== {dataset} / vector ===")
+    block.append(f"(fonte: {str(fonte_path)})")
+    block.append("")
+    # repete cabeçalho dataset e o conteúdo dele
+    content = fonte_path.read_text(encoding="utf-8")
+    block.append(content.strip())
+    block.append("")
+    block.append(SEPLONG)
+    block.append("")
+
+    with all_path.open("w", encoding="utf-8") as f:
+        # se já tem algo, concatena preservando
+        if existing.strip():
+            f.write(existing.rstrip() + "\n")
+        f.write("\n".join(block))
 
 # ========= Main =========
 
 def main():
-    parser = argparse.ArgumentParser(description="Agrega resultados do modelo vector (modelos_kf).")
+    parser = argparse.ArgumentParser(description="Agrega resultados do modelo vector (modelos_kf) com saída padronizada.")
     parser.add_argument("--base", type=str, required=True,
                         help="Diretório base de modelos_kf (ex.: /home/rodrigoduarte/Documentos/projeto/modelos_kf)")
     parser.add_argument("--force", action="store_true",
-                        help="Se definido, sobrescreve benchmark_result.txt mesmo que exista.")
-    parser.add_argument("--out", type=str, default="/home/rodrigoduarte/Documentos/projeto/treinamentos/estatisticas/vector_agregado_desempenho.txt",
-                        help="Caminho do arquivo agregado final do modelo vector.")
+                        help="Se definido, sobrescreve benchmark_result.txt existentes.")
+    parser.add_argument("--out-all", type=str,
+                        default="/home/rodrigoduarte/Documentos/projeto/treinamentos/estatisticas/desempenhos_vector_todos.txt",
+                        help="Arquivo consolidado final no formato desejado.")
+    parser.add_argument("--per-dataset-dir", type=str,
+                        default="/home/rodrigoduarte/Documentos/projeto/treinamentos/estatisticas",
+                        help="Diretório base onde criaremos <dataset>_custo/<dataset>_desempenho.txt")
     args = parser.parse_args()
 
     base_dir = Path(args.base).expanduser().resolve()
-    out_file = Path(args.out).expanduser().resolve()
-    out_file.parent.mkdir(parents=True, exist_ok=True)
+    out_all = Path(args.out_all).expanduser().resolve()
+    per_base = Path(args.per_dataset_dir).expanduser().resolve()
 
-    # Encontrar datasets do modelo 'vector'
+    # Limpa consolidado (recria do zero)
+    if out_all.exists():
+        out_all.unlink()
+
+    # Encontra datasets do modelo 'vector'
     dataset_dirs = sorted([p for p in base_dir.iterdir()
                            if p.is_dir() and p.name.endswith("_vector")])
 
     created = 0
     touched = 0
-    aggregate_rows = []
 
     for ds_dir in dataset_dirs:
         dataset_name = ds_dir.name.replace("_vector", "")
         tmodel = "vector"
 
-        # seeds (pode haver seed_42, seed_123, etc.). Se não houver, procurar folds direto.
+        # Se existir seed_*, usa; senão, procura folds direto
         seed_dirs = [p for p in ds_dir.glob("seed_*") if p.is_dir()]
         if not seed_dirs:
-            seed_dirs = [ds_dir]  # trata como se não houvesse subnível de seed
+            seed_dirs = [ds_dir]
+
+        rows = []
 
         for sd in seed_dirs:
             seed = None
@@ -274,7 +428,6 @@ def main():
             if m:
                 seed = m.group(1)
 
-            # folds
             for fold_dir in sorted(sd.glob("fold_*")):
                 if not fold_dir.is_dir():
                     continue
@@ -300,35 +453,19 @@ def main():
                 created += int(wrote)
                 touched += 1
 
-                # Para o agregadão final
                 row = gather_from_benchmark_result(bench_txt)
-                aggregate_rows.append(row)
+                rows.append(row)
 
-    # Gera arquivo único do modelo vector
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    header = [
-        "===== VECTOR AGREGADO (modelos_kf) =====",
-        f"gerado_em: {now}",
-        f"datasets_vector_encontrados: {len(dataset_dirs)}",
-        f"folds_processados: {len(aggregate_rows)}",
-        "",
-        "# Campos: dataset | seed | fold | best_epoch | val_acc | val_loss | test_acc | test_f1 | test_precision | test_recall | test_loss | inf_ms | thr_sps | gpu_mem_mb | ckpt_mb",
-        "",
-    ]
-    lines = header[:]
-    for r in aggregate_rows:
-        line = (
-            f"{r.get('dataset')} | {r.get('seed')} | {r.get('fold_idx')} | "
-            f"{r.get('best_epoch')} | {r.get('val_accuracy')} | {r.get('val_loss')} | "
-            f"{r.get('test_accuracy')} | {r.get('test_f1')} | {r.get('test_precision')} | {r.get('test_recall')} | {r.get('test_loss')} | "
-            f"{r.get('test_inf_ms_per_sample')} | {r.get('throughput_samples_per_sec')} | {r.get('max_gpu_mem_mb')} | {r.get('best_checkpoint_size_mb')}"
-        )
-        lines.append(line)
+        # === Para este dataset, gera o arquivo humano no formato desejado ===
+        per_ds_dir = per_base / f"{dataset_name}_custo"
+        per_ds_path = per_ds_dir / f"{dataset_name}_desempenho.txt"
+        write_dataset_human_report(per_ds_path, dataset_name, rows)
 
-    out_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        # Adiciona ao consolidado único, com a linha (fonte: ...)
+        append_to_all(out_all, dataset_name, per_ds_path)
 
     print(f"[OK] benchmark_result.txt criados/atualizados: {created}/{touched}")
-    print(f"[OK] Agregado do modelo vector: {out_file}")
+    print(f"[OK] Arquivo consolidado (formato desejado): {out_all}")
 
 if __name__ == "__main__":
     main()
